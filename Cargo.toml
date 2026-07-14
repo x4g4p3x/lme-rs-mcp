@@ -1,0 +1,28 @@
+[package]
+name = "lme-rs-mcp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Martin Huck <x4g4p3x@users.noreply.github.com>"]
+description = "Model Context Protocol (MCP) server exposing lme-rs mixed-effects modeling tools"
+license = "MIT"
+repository = "https://github.com/x4g4p3x/lme-rs-mcp"
+readme = "README.md"
+keywords = ["mcp", "mixed-effects", "lme4", "statistics"]
+categories = ["science", "command-line-utilities"]
+
+[[bin]]
+name = "lme-rs-mcp"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+# Requires lme-rs 0.1.11+ (bootstrap). Pulled from crates.io; no sibling clone needed.
+lme-rs = "0.1.11"
+polars = { version = "0.46.0", features = ["csv"] }
+rmcp = { version = "2.2", features = ["server", "transport-io"] }
+schemars = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util"] }
+uuid = { version = "1", features = ["v4"] }

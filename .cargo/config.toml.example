@@ -1,0 +1,9 @@
+# Local co-development with a sibling lme-rs checkout (optional).
+#
+#   task patch:local
+#
+# Use when testing MCP against unreleased lme-rs APIs. Not needed for normal
+# `cargo install` once the pinned crates.io version is published.
+
+[patch.crates-io]
+lme-rs = { path = "../lme-rs" }

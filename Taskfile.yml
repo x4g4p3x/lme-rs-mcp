@@ -1,0 +1,91 @@
+version: '3'
+
+tasks:
+  default:
+    aliases: [ci]
+    desc: Lint, check, and test (mirrors CI)
+    cmds:
+      - task: ci
+
+  ci:
+    desc: fmt --check, clippy, check, test
+    cmds:
+      - task: lint
+      - task: check
+      - task: test
+
+  lint:
+    desc: rustfmt --check and clippy
+    cmds:
+      - task: fmt:check
+      - task: clippy
+
+  preflight:
+    desc: Pre-push gate (lint + check + audit)
+    cmds:
+      - task: lint
+      - task: check
+      - task: audit
+
+  fmt:
+    desc: Apply rustfmt
+    cmds:
+      - cargo fmt
+
+  fmt:check:
+    desc: Check rustfmt formatting
+    cmds:
+      - cargo fmt --check
+
+  clippy:
+    desc: Run clippy with warnings denied
+    cmds:
+      - cargo clippy --all-targets --locked -- -D warnings
+
+  check:
+    desc: cargo check --all-targets --locked
+    cmds:
+      - cargo check --all-targets --locked
+
+  test:
+    desc: Integration and unit tests
+    cmds:
+      - cargo test --locked
+
+  build:release:
+    desc: Release binary for MCP clients
+    cmds:
+      - cargo build --release --locked
+
+  audit:
+    desc: cargo audit (install once with cargo install cargo-audit)
+    cmds:
+      - cargo audit
+
+  hooks:install:
+    desc: Install lefthook git hooks
+    cmds:
+      - lefthook install
+
+  hooks:uninstall:
+    desc: Remove lefthook hooks
+    cmds:
+      - lefthook uninstall
+
+  setup:
+    desc: Install pinned toolchain and git hooks
+    cmds:
+      - mise install
+      - task: hooks:install
+
+  patch:local:
+    desc: Enable sibling lme-rs via [patch.crates-io] (see CONTRIBUTING.md)
+    cmds:
+      - cmd: |
+          {{if eq OS "windows"}}
+          if not exist .cargo mkdir .cargo
+          copy /Y .cargo\config.toml.example .cargo\config.toml
+          {{else}}
+          mkdir -p .cargo
+          cp .cargo/config.toml.example .cargo/config.toml
+          {{end}}

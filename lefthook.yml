@@ -1,0 +1,30 @@
+# Git hooks — staged Rust only. Install: task hooks:install
+# Docs: https://lefthook.dev/configuration/
+
+min_version: 1.6.0
+
+pre-commit:
+  parallel: true
+  commands:
+    rust-fmt:
+      priority: 1
+      glob: "*.rs"
+      exclude: "(^|/)target/"
+      run: cargo fmt
+      stage_fixed: true
+
+    rust-clippy:
+      priority: 2
+      glob: "*.rs"
+      exclude: "(^|/)target/"
+      run: cargo clippy --all-targets --locked -- -D warnings
+
+    rust-check-manifest:
+      priority: 3
+      glob: "{Cargo.toml,Cargo.lock}"
+      run: cargo check --all-targets --locked
+
+pre-push:
+  commands:
+    preflight:
+      run: task preflight
