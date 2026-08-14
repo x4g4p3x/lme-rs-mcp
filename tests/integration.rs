@@ -5,6 +5,7 @@ use lme_rs_mcp::{
 };
 use polars::prelude::*;
 use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -21,6 +22,10 @@ fn sleepstudy_path() -> PathBuf {
 
 fn poisson_glmm_path() -> PathBuf {
     data_path("poisson_glmm.csv")
+}
+
+fn nlmm_micmen_path() -> PathBuf {
+    data_path("nlmm_micmen.csv")
 }
 
 #[test]
@@ -49,6 +54,7 @@ fn protocol_neutral_api_fit_lifecycle() {
     assert_eq!(fit.family, None);
     assert_eq!(fit.link, None);
     assert_eq!(fit.n_agq, None);
+    assert_eq!(fit.start, None);
     assert_eq!(fit.num_obs, 180);
     assert!(!fit.coefficients.is_empty());
 
@@ -58,6 +64,7 @@ fn protocol_neutral_api_fit_lifecycle() {
     assert_eq!(listed.fits[0].model_kind, ModelKind::Lmm);
     assert_eq!(listed.fits[0].reml, Some(true));
     assert_eq!(listed.fits[0].n_agq, None);
+    assert_eq!(listed.fits[0].start, None);
 
     let summary = api.fit_summary(&fit.fit_id).expect("cached summary");
     assert_eq!(summary.formula, fit.formula);
@@ -80,6 +87,7 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
             family: Some("Poisson".to_string()),
             link: None,
             n_agq: Some(1),
+            start: None,
         })
         .expect("fit Poisson GLMM through semantic API");
 
@@ -88,6 +96,7 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
     assert_eq!(fit.family.as_deref(), Some("poisson"));
     assert_eq!(fit.link.as_deref(), Some("log"));
     assert_eq!(fit.n_agq, Some(1));
+    assert_eq!(fit.start, None);
     assert_eq!(fit.num_obs, 36);
     assert!(!fit.coefficients.is_empty());
 
@@ -97,6 +106,7 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
     assert_eq!(listed.fits[0].family.as_deref(), Some("poisson"));
     assert_eq!(listed.fits[0].link.as_deref(), Some("log"));
     assert_eq!(listed.fits[0].n_agq, Some(1));
+    assert_eq!(listed.fits[0].start, None);
 
     let summary = api.fit_summary(&fit.fit_id).expect("cached GLMM summary");
     assert_eq!(summary.model_kind, ModelKind::Glmm);
@@ -116,6 +126,59 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
 }
 
 #[test]
+fn protocol_neutral_fit_model_nlmm_lifecycle() {
+    let api = LmeAgentApi::new();
+    let start = BTreeMap::from([("K".to_string(), 1.5), ("Vmax".to_string(), 10.0)]);
+    let fit = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Nlmm,
+            formula: "y ~ SSmicmen(x, Vmax, K) ~ Vmax|g".to_string(),
+            data_path: nlmm_micmen_path().display().to_string(),
+            reml: Some(false),
+            family: None,
+            link: None,
+            n_agq: Some(1),
+            start: Some(start.clone()),
+        })
+        .expect("fit Michaelis-Menten NLMM through semantic API");
+
+    assert_eq!(fit.model_kind, ModelKind::Nlmm);
+    assert_eq!(fit.reml, Some(false));
+    assert_eq!(fit.family, None);
+    assert_eq!(fit.link, None);
+    assert_eq!(fit.n_agq, Some(1));
+    assert_eq!(fit.start.as_ref(), Some(&start));
+    assert_eq!(fit.num_obs, 40);
+    assert_eq!(fit.coefficients.len(), 2);
+    assert!(fit.coefficients.iter().all(|value| value.is_finite()));
+
+    let listed = api.list_fits();
+    assert_eq!(listed.fits.len(), 1);
+    assert_eq!(listed.fits[0].model_kind, ModelKind::Nlmm);
+    assert_eq!(listed.fits[0].reml, Some(false));
+    assert_eq!(listed.fits[0].family, None);
+    assert_eq!(listed.fits[0].link, None);
+    assert_eq!(listed.fits[0].n_agq, Some(1));
+    assert_eq!(listed.fits[0].start.as_ref(), Some(&start));
+
+    let summary = api.fit_summary(&fit.fit_id).expect("cached NLMM summary");
+    assert_eq!(summary.model_kind, ModelKind::Nlmm);
+    assert_eq!(summary.start.as_ref(), Some(&start));
+
+    let error = api
+        .anova(AnovaRequest {
+            fit_id: fit.fit_id.clone(),
+            ddf_method: "satterthwaite".to_string(),
+            anova_type: "III".to_string(),
+        })
+        .expect_err("LMM ANOVA must reject NLMMs");
+    assert!(error.to_string().contains("lmm models only"));
+
+    api.forget_fit(&fit.fit_id).expect("forget NLMM");
+    assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
 fn fit_model_rejects_invalid_glmm_family_link_before_io() {
     let api = LmeAgentApi::new();
     let error = api
@@ -127,12 +190,38 @@ fn fit_model_rejects_invalid_glmm_family_link_before_io() {
             family: Some("poisson".to_string()),
             link: Some("logit".to_string()),
             n_agq: Some(1),
+            start: None,
         })
         .expect_err("invalid family/link pair must be rejected");
 
     match error {
         AgentApiError::InvalidInput(message) => {
             assert!(message.contains("not valid for family"));
+        }
+        other => panic!("expected InvalidInput, got {other}"),
+    }
+}
+
+#[test]
+fn fit_model_rejects_invalid_nlmm_start_before_io() {
+    let api = LmeAgentApi::new();
+    let start = BTreeMap::from([("Vmax".to_string(), f64::NAN)]);
+    let error = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Nlmm,
+            formula: "y ~ SSmicmen(x, Vmax, K) ~ Vmax|g".to_string(),
+            data_path: "does-not-exist.csv".to_string(),
+            reml: None,
+            family: None,
+            link: None,
+            n_agq: Some(1),
+            start: Some(start),
+        })
+        .expect_err("non-finite NLMM start must be rejected before IO");
+
+    match error {
+        AgentApiError::InvalidInput(message) => {
+            assert!(message.contains("must be finite"));
         }
         other => panic!("expected InvalidInput, got {other}"),
     }
