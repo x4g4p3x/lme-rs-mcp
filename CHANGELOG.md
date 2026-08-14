@@ -8,6 +8,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`LmeAgentApi`** — protocol-neutral statistical/session API reusable by MCP and future scientific protocol adapters.
+- Typed request DTOs for fit, ANOVA, bootstrap, and fit-id operations.
+- Typed response DTOs with JSON schemas, including fit lists and forget-fit results.
+- **AGENT_API.md** — target semantic tool surface and migration path to the current `lme-rs 0.2.x` feature set.
+- Integration coverage for the protocol-neutral fit lifecycle and MCP structured output conversion.
 - **GUIDE.md** — installation, architecture, session model, full tool reference, sleepstudy workflow, troubleshooting.
 - **CONTRIBUTING.md** — development layout and tool-addition checklist.
 - **AGENTS.md** — contributor hooks and preflight.
@@ -19,6 +24,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- MCP handlers are now a thin transport layer over `LmeAgentApi`; statistical logic no longer lives in the MCP router.
+- MCP tool results now return typed `rmcp::Json<T>` values, providing `structuredContent` and generated `outputSchema` instead of manually serialized JSON strings.
+- Existing MCP tool names remain unchanged for compatibility while the semantic API is developed.
 - **`lme-rs` dependency** — crates.io pin `0.1.11` (bootstrap); simplified single-repo CI.
 - **RELEASING.md** — publish `lme-rs` 0.1.11 before refreshing `Cargo.lock` and tagging MCP.
 - **Committed `Cargo.lock`** for reproducible binary builds.
