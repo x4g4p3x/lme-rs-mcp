@@ -51,8 +51,8 @@ impl LmeAgentApi {
             ));
         }
 
-        let (path, df) = load_csv(&request.data_path)
-            .map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
+        let (path, df) =
+            load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         let fit = lmer(&request.formula, &df, request.reml)
             .map_err(|e| AgentApiError::Computation(e.to_string()))?;
         let fit_id = Uuid::new_v4().to_string();
