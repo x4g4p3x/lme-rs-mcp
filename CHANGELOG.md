@@ -9,38 +9,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **`LmeAgentApi`** — protocol-neutral statistical/session API reusable by MCP and future scientific protocol adapters.
-- **`fit_model` semantic fitting API/MCP tool** — supports Gaussian LMMs, GLMMs, and built-in formula-based NLMMs while retaining `lme_fit` as the backwards-compatible LMM entry point.
-- **GLMM fitting** — binomial, Poisson, Gaussian, and Gamma families with canonical or explicit validated links and configurable `n_agq` (default `1`).
-- **NLMM fitting** — upstream three-part `nlmer` formulas with built-in nonlinear means, optional named `start` values, REML/ML selection (ML by default), and configurable `n_agq` (default `1`).
-- `FitModelRequest` with model-family-aware validation: inapplicable options are rejected rather than silently ignored.
-- Typed request DTOs for fit, ANOVA, bootstrap, and fit-id operations.
-- Typed response DTOs with JSON schemas, including fit lists and forget-fit results.
-- **`ModelKind` session metadata** (`lm`, `lmm`, `glmm`, `nlmm`) plus optional REML/family/link/`n_agq` and NLMM start metadata in fit summaries and listings.
-- Explicit model-family guards for current LMM-only ANOVA and bootstrap adapter operations.
-- Poisson random-intercept GLMM integration fixture and protocol-neutral GLMM lifecycle coverage.
-- Michaelis-Menten random-intercept NLMM integration fixture and protocol-neutral NLMM lifecycle coverage.
-- **AGENT_API.md** — target semantic tool surface and migration path to the current `lme-rs 0.2.x` feature set.
-- Integration coverage for the protocol-neutral fit lifecycle, stable model-kind names, and MCP structured output conversion.
-- **GUIDE.md** — installation, architecture, session model, full tool reference, workflows, troubleshooting.
-- **CONTRIBUTING.md** — development layout and tool-addition checklist.
-- **AGENTS.md** — contributor hooks and preflight.
-- **Taskfile.yml**, **mise.toml**, **lefthook.yml** — Rust-only dev workflow (`task ci`, `task preflight`).
-- **`.github/workflows/ci.yml`** — fmt, clippy, check, test (ubuntu + windows).
-- **`.cargo/config.toml.example`** — optional `[patch.crates-io]` for sibling `lme-rs` co-development.
-- Vendored **`tests/data/sleepstudy.csv`** — tests no longer depend on a sibling checkout.
-- Relative `data_path` resolution under `LME_MCP_DATA_ROOT` (filename-only workflow).
+- **Complete semantic `fit_model` surface** for LM, LMM, GLMM, and built-in formula-based NLMM models.
+- **GLMM fitting** — binomial, Poisson, Gaussian, and Gamma families with canonical or explicit validated links and configurable `n_agq`.
+- **NLMM fitting** — upstream three-part `nlmer` formulas, built-in means, optional named starts, REML/ML, and configurable `n_agq`.
+- **Semantic lifecycle tools** — `list_models`, `model_summary`, `forget_model`.
+- **Semantic inference/workflow tools** — `anova`, `bootstrap`, `compare_models`, `confidence_intervals`, `predict`, `cross_validate`, and `diagnostics`.
+- **Model-aware bootstrap** — LMM parametric/residual and GLMM parametric refits while retaining the legacy LMM-only `lme_boot` contract.
+- **Likelihood-ratio model comparison** for compatible cached mixed models.
+- **Wald/profile confidence intervals** with optional fixed-effect parameter selection; profile CIs follow the released LMM/GLMM engine support.
+- **Population/conditional prediction** on link or response scale, with optional new CSV data and explicit new-level handling.
+- **Grouped cross-validation** for LMM/GLMM with OOF predictions and global/per-fold metrics.
+- **Diagnostics** for convergence, residuals, coefficient finiteness, dimensions, and statistical-output availability.
+- Typed request/response DTOs and JSON schemas for the semantic API.
+- **`ModelKind` session metadata** (`lm`, `lmm`, `glmm`, `nlmm`) plus applicable REML/family/link/`n_agq`/NLMM-start metadata.
+- Poisson GLMM and Michaelis-Menten NLMM integration fixtures and lifecycle coverage.
+- Integration coverage for LM fitting, lifecycle aliases, prediction, diagnostics, nested LMM comparison, confidence intervals, grouped CV, and semantic bootstrap validation.
+- **AGENT_API.md**, **GUIDE.md**, **CONTRIBUTING.md**, **AGENTS.md**, **RELEASING.md** and Rust development/CI workflow files.
+- Relative `data_path` resolution under `LME_MCP_DATA_ROOT`.
 
 ### Changed
 
-- MCP handlers are now a thin transport layer over `LmeAgentApi`; statistical logic no longer lives in the MCP router.
-- MCP tool results now return typed `rmcp::Json<T>` values, providing `structuredContent` and generated `outputSchema` instead of manually serialized JSON strings.
-- Existing MCP tool names remain unchanged for compatibility while semantic names are added incrementally.
-- `lme_fit` now delegates to the same semantic LMM implementation used by `fit_model`.
-- GLMM family/link fields in session summaries are explicitly scoped to GLMM fits; NLMM metadata uses REML, `n_agq`, and optional user-supplied start values instead.
-- **`lme-rs` dependency** — upgraded from crates.io `0.1.11` to **`0.2.1`** and regenerated `Cargo.lock` with Cargo.
-- Fit-session records remain backed by the unified upstream `LmeFit` type, but now carry protocol-neutral model semantics so GLMM/NLMM support does not require a parallel concrete-fit enum.
-- **RELEASING.md** — publish the matching `lme-rs` release before refreshing `Cargo.lock` and tagging MCP.
-- **Committed `Cargo.lock`** for reproducible binary builds.
+- MCP handlers are a thin transport layer over `LmeAgentApi`; statistical/session semantics live in the protocol-neutral core.
+- MCP tool results return typed `rmcp::Json<T>`, providing `structuredContent` and generated `outputSchema`.
+- Existing `lme_*` MCP names remain available for compatibility while semantic names provide the preferred new surface.
+- `lme_fit` delegates to the same semantic LMM implementation used by `fit_model`.
+- Fit-session records remain backed by the unified upstream `LmeFit` while carrying protocol-neutral model semantics.
+- The adapter targets the published crates.io **`lme-rs 0.2.1`** release rather than unreleased upstream revisions.
+- Estimated marginal means are intentionally deferred until the post-`v0.2.1` upstream implementation is included in a published `lme-rs` release; statistical code is not duplicated in the MCP adapter.
+- **Committed `Cargo.lock`** remains the reproducible binary dependency resolution.
 
 ## [0.1.0] - 2026-07-14
 

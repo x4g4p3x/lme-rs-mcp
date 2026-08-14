@@ -31,17 +31,50 @@ impl ModelKind {
     }
 }
 
+/// Population-level versus random-effects-conditional prediction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum PredictionMode {
+    /// Fixed/population effects only.
+    Population,
+    /// Include fitted random effects for known grouping levels.
+    Conditional,
+}
+
+/// Prediction scale for generalized models.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum PredictionScale {
+    /// Linear-predictor scale.
+    Link,
+    /// Response scale after applying the inverse link where applicable.
+    Response,
+}
+
+/// Confidence-interval method exposed by the semantic API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum ConfidenceIntervalMethod {
+    /// Wald interval from the fitted coefficient standard error.
+    Wald,
+    /// Profile-likelihood interval (LMM/GLMM only).
+    Profile,
+}
+
 /// Semantic model-fitting request shared by protocol adapters.
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitModelRequest {
-    /// Statistical model family. This migration step implements `lmm`, `glmm`, and `nlmm`.
+    /// Statistical model family: `lm`, `lmm`, `glmm`, or `nlmm`.
     pub model_kind: ModelKind,
-    /// Model formula. LMM/GLMM use Wilkinson syntax; NLMM uses the three-part `nlmer` syntax.
+    /// Model formula. LM/LMM/GLMM use Wilkinson syntax; NLMM uses three-part `nlmer` syntax.
     pub formula: String,
     /// Absolute or relative path to a CSV file on the server host.
     pub data_path: String,
-    /// REML setting for LMM/NLMM. Defaults to true for LMM and false for NLMM; invalid for GLMM.
+    /// REML setting for LMM/NLMM. Defaults to true for LMM and false for NLMM.
     #[serde(default)]
     pub reml: Option<bool>,
     /// GLMM distribution family: binomial, poisson, gaussian, or gamma.
@@ -54,7 +87,6 @@ pub struct FitModelRequest {
     #[serde(default)]
     pub n_agq: Option<usize>,
     /// Optional named starting values for NLMM population parameters.
-    /// Omit to use the built-in self-start heuristics.
     #[serde(default)]
     pub start: Option<BTreeMap<String, f64>>,
 }
@@ -88,6 +120,7 @@ pub struct AnovaRequest {
     pub anova_type: String,
 }
 
+/// Legacy LMM-only bootstrap request retained for `lme_boot`.
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct BootstrapRequest {
@@ -106,6 +139,80 @@ pub struct BootstrapRequest {
     pub level: f64,
 }
 
+/// Model-aware bootstrap request used by the semantic `bootstrap` operation.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ModelBootstrapRequest {
+    pub fit_id: String,
+    #[serde(default = "default_nsim")]
+    pub nsim: usize,
+    #[serde(default = "default_boot_method")]
+    pub method: String,
+    /// Optional LMM REML/ML refit setting. Invalid for GLMM.
+    #[serde(default)]
+    pub reml: Option<bool>,
+    #[serde(default)]
+    pub seed: Option<u64>,
+    #[serde(default)]
+    pub n_jobs: Option<usize>,
+    #[serde(default = "default_conf_level")]
+    pub level: f64,
+}
+
+/// Compare two cached nested models by likelihood-ratio test.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CompareModelsRequest {
+    pub fit_id_a: String,
+    pub fit_id_b: String,
+}
+
+/// Confidence intervals for fixed-effect coefficients.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ConfidenceIntervalsRequest {
+    pub fit_id: String,
+    #[serde(default = "default_conf_level")]
+    pub level: f64,
+    #[serde(default = "default_ci_method")]
+    pub method: ConfidenceIntervalMethod,
+    /// Optional coefficient names. Omit or pass an empty list for all coefficients.
+    #[serde(default)]
+    pub parameters: Option<Vec<String>>,
+}
+
+/// Prediction request for a cached model.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct PredictRequest {
+    pub fit_id: String,
+    /// CSV path for new data. Omit to predict on the original fitted dataset.
+    #[serde(default)]
+    pub data_path: Option<String>,
+    #[serde(default = "default_prediction_mode")]
+    pub mode: PredictionMode,
+    #[serde(default = "default_prediction_scale")]
+    pub scale: PredictionScale,
+    /// Permit unseen grouping levels for conditional mixed-model prediction.
+    #[serde(default)]
+    pub allow_new_levels: bool,
+}
+
+/// Group-preserving cross-validation request.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CrossValidateRequest {
+    pub fit_id: String,
+    /// Grouping column whose levels are kept intact across folds.
+    pub group_col: String,
+    #[serde(default = "default_n_splits")]
+    pub n_splits: usize,
+    #[serde(default)]
+    pub seed: Option<u64>,
+    #[serde(default)]
+    pub n_jobs: Option<usize>,
+}
+
 #[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitSummary {
@@ -113,15 +220,10 @@ pub struct FitSummary {
     pub model_kind: ModelKind,
     pub formula: String,
     pub data_path: String,
-    /// REML setting for models where it applies; `None` for model families without REML.
     pub reml: Option<bool>,
-    /// Distribution family for GLMMs, otherwise `None`.
     pub family: Option<String>,
-    /// Link function for GLMMs, otherwise `None`.
     pub link: Option<String>,
-    /// Adaptive Gauss-Hermite quadrature points for GLMM/NLMM, otherwise `None`.
     pub n_agq: Option<usize>,
-    /// User-provided NLMM starting values; `None` means built-in self-start heuristics were requested.
     pub start: Option<BTreeMap<String, f64>>,
     pub num_obs: usize,
     pub converged: bool,
@@ -200,6 +302,102 @@ pub struct BootSummary {
     pub intervals: Vec<BootConfintRow>,
 }
 
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CompareModelsSummary {
+    pub fit_id_a: String,
+    pub fit_id_b: String,
+    pub model_kind: ModelKind,
+    pub formula_0: String,
+    pub formula_1: String,
+    pub n_params_0: usize,
+    pub n_params_1: usize,
+    pub deviance_0: f64,
+    pub deviance_1: f64,
+    pub chi_sq: f64,
+    pub df: usize,
+    pub p_value: f64,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ConfidenceIntervalRow {
+    pub name: String,
+    pub estimate: f64,
+    pub lower: f64,
+    pub upper: f64,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ConfidenceIntervalsSummary {
+    pub fit_id: String,
+    pub method: ConfidenceIntervalMethod,
+    pub level: f64,
+    pub intervals: Vec<ConfidenceIntervalRow>,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct PredictionSummary {
+    pub fit_id: String,
+    pub model_kind: ModelKind,
+    pub data_path: String,
+    pub mode: PredictionMode,
+    pub scale: PredictionScale,
+    pub allow_new_levels: bool,
+    pub predictions: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CrossValidationFold {
+    pub fold: usize,
+    pub n_train_groups: usize,
+    pub n_test_groups: usize,
+    pub n_train_obs: usize,
+    pub n_test_obs: usize,
+    pub rmse: f64,
+    pub mae: f64,
+    pub mean_log_loss: Option<f64>,
+    pub converged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CrossValidationSummary {
+    pub fit_id: String,
+    pub model_kind: ModelKind,
+    pub group_col: String,
+    pub n_splits: usize,
+    pub rmse: f64,
+    pub mae: f64,
+    pub mean_log_loss: Option<f64>,
+    pub all_converged: bool,
+    pub oof_predictions: Vec<f64>,
+    pub test_fold: Vec<i32>,
+    pub folds: Vec<CrossValidationFold>,
+}
+
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct DiagnosticsSummary {
+    pub fit_id: String,
+    pub model_kind: ModelKind,
+    pub converged: bool,
+    pub iterations: Option<u64>,
+    pub num_obs: usize,
+    pub n_fixed: usize,
+    pub n_theta: usize,
+    pub finite_coefficients: bool,
+    pub finite_residuals: bool,
+    pub has_standard_errors: bool,
+    pub residual_mean: Option<f64>,
+    pub residual_rmse: Option<f64>,
+    pub max_abs_residual: Option<f64>,
+    pub messages: Vec<String>,
+}
+
 fn default_reml() -> bool {
     true
 }
@@ -222,4 +420,20 @@ fn default_boot_method() -> String {
 
 fn default_conf_level() -> f64 {
     0.95
+}
+
+fn default_ci_method() -> ConfidenceIntervalMethod {
+    ConfidenceIntervalMethod::Wald
+}
+
+fn default_prediction_mode() -> PredictionMode {
+    PredictionMode::Population
+}
+
+fn default_prediction_scale() -> PredictionScale {
+    PredictionScale::Response
+}
+
+fn default_n_splits() -> usize {
+    5
 }
