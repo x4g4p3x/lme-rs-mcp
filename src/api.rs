@@ -454,7 +454,7 @@ impl LmeAgentApi {
             )
             .map_err(|e| AgentApiError::Computation(e.to_string()))?,
             ModelKind::Glmm => {
-                let family = cached.fit.family.clone().ok_or_else(|| {
+                let family = cached.fit.family.ok_or_else(|| {
                     AgentApiError::Computation(
                         "cached GLMM is missing its distribution family".to_string(),
                     )
