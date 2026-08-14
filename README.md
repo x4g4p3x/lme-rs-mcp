@@ -30,18 +30,21 @@ lme-rs + Polars
 
 MCP tools return `rmcp::Json<T>`, so clients receive an MCP `outputSchema` plus `structuredContent` (with backwards-compatible text content supplied by `rmcp`).
 
-The current adapter targets **`lme-rs 0.2.1`**. Cached records carry semantic `model_kind` metadata while using the unified upstream `LmeFit` representation, so future GLMM/NLMM fitting can reuse the same session layer.
+The current adapter targets **`lme-rs 0.2.1`**. Cached records carry semantic `model_kind` metadata while using the unified upstream `LmeFit` representation, so LMM and GLMM fitting share one session model and NLMM can be added without another storage redesign.
 
 ## What it does today
 
 | Capability | MCP tools |
 |:-----------|:----------|
-| Fit Gaussian LMMs from CSV | `lme_fit` |
+| Semantic LMM/GLMM fitting from CSV | `fit_model` |
+| Backwards-compatible Gaussian LMM fitting | `lme_fit` |
 | Session management | `lme_list_fits`, `lme_fit_summary`, `lme_forget_fit` |
-| Fixed-effects ANOVA (Type I–III) | `lme_anova` |
-| Bootstrap CIs (`bootMer`-style) | `lme_boot` |
+| Fixed-effects ANOVA (Type I–III, LMM only) | `lme_anova` |
+| Bootstrap CIs (`bootMer`-style, LMM only) | `lme_boot` |
 
-**Current MCP fitting scope:** Gaussian LMMs only. GLMM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet. Fit/list/summary results already include model-kind metadata, optional REML, and family/link slots for the wider model surface.
+`fit_model` currently accepts `model_kind = "lmm"` or `"glmm"`. GLMM families are **binomial**, **poisson**, **gaussian**, and **gamma**. The link is optional; when omitted the family’s canonical link is used. Explicit supported links are `logit`, `probit`, `cloglog`, `log`, `identity`, `inverse`, and `sqrt`, subject to family/link compatibility. GLMM `n_agq` defaults to `1`.
+
+LM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet. Fit/list/summary results include `model_kind`, optional REML, GLMM family/link, and optional `n_agq` metadata.
 
 The target agent-facing surface and migration sequence are documented in **[AGENT_API.md](AGENT_API.md)**.
 
@@ -86,11 +89,21 @@ Use a **release build path** or the `cargo install` binary. Point `LME_MCP_DATA_
 
 ### Typical agent workflow
 
-1. `lme_fit` with `formula` + `data_path` → receive `fit_id`
-2. `lme_anova` or `lme_boot` with that `fit_id`
-3. `lme_forget_fit` when done (optional; session is in-process memory only)
+For new integrations, prefer `fit_model`:
 
-Example `lme_fit` arguments:
+```json
+{
+  "model_kind": "glmm",
+  "formula": "y ~ x + (1 | group)",
+  "data_path": "poisson_data.csv",
+  "family": "poisson",
+  "n_agq": 1
+}
+```
+
+The canonical `log` link is selected automatically. To request a noncanonical valid link, add `"link": "identity"` (or another family-compatible link).
+
+For existing LMM clients, `lme_fit` remains supported unchanged:
 
 ```json
 {
@@ -99,6 +112,8 @@ Example `lme_fit` arguments:
   "reml": true
 }
 ```
+
+Both fitting entry points return a `fit_id`. Use the existing session tools to inspect or forget that model. `lme_anova` and `lme_boot` currently accept LMM fits only and reject cached GLMMs explicitly.
 
 With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that directory (filename-only is fine).
 
@@ -123,7 +138,7 @@ With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that dir
 
 ## Status
 
-The published **0.1.0** release used `lme-rs 0.1.11`. Current master development targets **`lme-rs 0.2.1`** and has a model-kind-aware session contract. The next semantic step is a general `fit_model` operation, starting with GLMM while keeping `lme_fit` as the LMM compatibility entry point. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
+The published **0.1.0** release used `lme-rs 0.1.11`. Current master development targets **`lme-rs 0.2.1`**, uses a model-kind-aware session contract, and exposes semantic LMM/GLMM fitting through `fit_model` while retaining `lme_fit` for compatibility. The next fitting step is LM/NLMM support; the next broader API step is to add semantic model lifecycle aliases and then prediction/model-comparison/inference operations incrementally. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
 
 ## License
 
