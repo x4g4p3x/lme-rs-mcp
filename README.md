@@ -30,6 +30,8 @@ lme-rs + Polars
 
 MCP tools return `rmcp::Json<T>`, so clients receive an MCP `outputSchema` plus `structuredContent` (with backwards-compatible text content supplied by `rmcp`).
 
+The current adapter targets **`lme-rs 0.2.1`**. Cached records carry semantic `model_kind` metadata while using the unified upstream `LmeFit` representation, so future GLMM/NLMM fitting can reuse the same session layer.
+
 ## What it does today
 
 | Capability | MCP tools |
@@ -39,9 +41,9 @@ MCP tools return `rmcp::Json<T>`, so clients receive an MCP `outputSchema` plus 
 | Fixed-effects ANOVA (Type I–III) | `lme_anova` |
 | Bootstrap CIs (`bootMer`-style) | `lme_boot` |
 
-**Released 0.1.0 scope:** Gaussian LMMs only. GLMM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet.
+**Current MCP fitting scope:** Gaussian LMMs only. GLMM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet. Fit/list/summary results already include model-kind metadata, optional REML, and family/link slots for the wider model surface.
 
-The target agent-facing surface and migration path to the current `lme-rs 0.2.x` feature set are documented in **[AGENT_API.md](AGENT_API.md)**.
+The target agent-facing surface and migration sequence are documented in **[AGENT_API.md](AGENT_API.md)**.
 
 ## Install
 
@@ -121,7 +123,7 @@ With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that dir
 
 ## Status
 
-**Released version 0.1.0** requires **`lme-rs 0.1.11`**. The next migration step is to upgrade the adapter to the current `lme-rs 0.2.x` line after the protocol-neutral model/session contract is in place. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
+The published **0.1.0** release used `lme-rs 0.1.11`. Current master development targets **`lme-rs 0.2.1`** and has a model-kind-aware session contract. The next semantic step is a general `fit_model` operation, starting with GLMM while keeping `lme_fit` as the LMM compatibility entry point. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
 
 ## License
 

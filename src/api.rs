@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::data::load_csv;
 use crate::dto::{
     AnovaRequest, AnovaRow, AnovaSummary, BootConfintRow, BootSummary, BootstrapRequest,
-    FitListEntry, FitListSummary, FitLmmRequest, FitSummary, ForgetFitResult,
+    FitListEntry, FitListSummary, FitLmmRequest, FitSummary, ForgetFitResult, ModelKind,
 };
 use crate::session::{CachedFit, FitSession};
 
@@ -57,9 +57,10 @@ impl LmeAgentApi {
             .map_err(|e| AgentApiError::Computation(e.to_string()))?;
         let fit_id = Uuid::new_v4().to_string();
         let cached = CachedFit {
+            model_kind: ModelKind::Lmm,
             formula: request.formula,
             data_path: path,
-            reml: request.reml,
+            reml: Some(request.reml),
             fit,
         };
         let summary = fit_summary_from_cached(&fit_id, &cached);
@@ -74,9 +75,12 @@ impl LmeAgentApi {
             .into_iter()
             .map(|(fit_id, cached)| FitListEntry {
                 fit_id,
+                model_kind: cached.model_kind,
                 formula: cached.formula,
                 data_path: cached.data_path.display().to_string(),
                 reml: cached.reml,
+                family: cached.fit.family_name.clone(),
+                link: cached.fit.link_name.clone(),
                 num_obs: cached.fit.num_obs,
             })
             .collect();
@@ -102,6 +106,7 @@ impl LmeAgentApi {
 
     pub fn anova(&self, request: AnovaRequest) -> Result<AnovaSummary, AgentApiError> {
         let mut cached = self.cached_fit(&request.fit_id)?;
+        ensure_lmm_operation(&cached, "anova")?;
         let ddf = parse_ddf_method(&request.ddf_method)?;
         let anova_type = parse_anova_type(&request.anova_type)?;
 
@@ -147,6 +152,7 @@ impl LmeAgentApi {
         }
 
         let cached = self.cached_fit(&request.fit_id)?;
+        ensure_lmm_operation(&cached, "bootstrap")?;
         let (_, df) = load_csv(cached.data_path.to_string_lossy().as_ref())
             .map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         let method = parse_boot_method(&request.method)?;
@@ -202,9 +208,12 @@ fn fit_summary_from_cached(fit_id: &str, cached: &CachedFit) -> FitSummary {
     let fit = &cached.fit;
     FitSummary {
         fit_id: fit_id.to_string(),
+        model_kind: cached.model_kind,
         formula: cached.formula.clone(),
         data_path: cached.data_path.display().to_string(),
         reml: cached.reml,
+        family: fit.family_name.clone(),
+        link: fit.link_name.clone(),
         num_obs: fit.num_obs,
         converged: fit.converged.unwrap_or(false),
         fixed_names: fit.fixed_names.clone().unwrap_or_default(),
@@ -214,6 +223,17 @@ fn fit_summary_from_cached(fit_id: &str, cached: &CachedFit) -> FitSummary {
         aic: fit.aic,
         bic: fit.bic,
         log_likelihood: fit.log_likelihood,
+    }
+}
+
+fn ensure_lmm_operation(cached: &CachedFit, operation: &str) -> Result<(), AgentApiError> {
+    if cached.model_kind == ModelKind::Lmm {
+        Ok(())
+    } else {
+        Err(AgentApiError::InvalidInput(format!(
+            "{operation} currently supports lmm models only; fit is {}",
+            cached.model_kind.as_str()
+        )))
     }
 }
 

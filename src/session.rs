@@ -6,11 +6,17 @@ use std::sync::Mutex;
 
 use lme_rs::LmeFit;
 
+use crate::dto::ModelKind;
+
 #[derive(Debug)]
 pub struct CachedFit {
+    /// Semantic family of the cached model.
+    pub model_kind: ModelKind,
     pub formula: String,
     pub data_path: PathBuf,
-    pub reml: bool,
+    /// REML setting when applicable to the model family.
+    pub reml: Option<bool>,
+    /// Unified `lme-rs` fit representation used by LMM, GLMM, and NLMM models.
     pub fit: LmeFit,
 }
 
@@ -37,6 +43,7 @@ impl FitSession {
             .expect("fit session lock poisoned")
             .get(fit_id)
             .map(|c| CachedFit {
+                model_kind: c.model_kind,
                 formula: c.formula.clone(),
                 data_path: c.data_path.clone(),
                 reml: c.reml,
@@ -53,6 +60,7 @@ impl FitSession {
                 (
                     id.clone(),
                     CachedFit {
+                        model_kind: c.model_kind,
                         formula: c.formula.clone(),
                         data_path: c.data_path.clone(),
                         reml: c.reml,
