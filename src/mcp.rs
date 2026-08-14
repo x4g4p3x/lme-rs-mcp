@@ -1,8 +1,6 @@
 //! MCP transport adapter for the protocol-neutral [`LmeAgentApi`](crate::LmeAgentApi).
 
-use rmcp::{
-    handler::server::wrapper::Parameters, tool, tool_router, ErrorData as McpError, Json,
-};
+use rmcp::{handler::server::wrapper::Parameters, tool, tool_router, ErrorData as McpError, Json};
 
 use crate::api::{AgentApiError, LmeAgentApi};
 use crate::dto::{
@@ -50,10 +48,7 @@ impl LmeMcpServer {
         &self,
         Parameters(request): Parameters<FitLmmRequest>,
     ) -> Result<Json<FitSummary>, McpError> {
-        self.api
-            .fit_lmm(request)
-            .map(Json)
-            .map_err(to_mcp_error)
+        self.api.fit_lmm(request).map(Json).map_err(to_mcp_error)
     }
 
     #[tool(description = "List fit_ids currently stored in the MCP session.")]
@@ -77,10 +72,7 @@ impl LmeMcpServer {
         &self,
         Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
     ) -> Result<Json<ForgetFitResult>, McpError> {
-        self.api
-            .forget_fit(&fit_id)
-            .map(Json)
-            .map_err(to_mcp_error)
+        self.api.forget_fit(&fit_id).map(Json).map_err(to_mcp_error)
     }
 
     #[tool(
@@ -100,9 +92,6 @@ impl LmeMcpServer {
         &self,
         Parameters(request): Parameters<BootstrapRequest>,
     ) -> Result<Json<BootSummary>, McpError> {
-        self.api
-            .bootstrap(request)
-            .map(Json)
-            .map_err(to_mcp_error)
+        self.api.bootstrap(request).map(Json).map_err(to_mcp_error)
     }
 }
