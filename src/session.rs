@@ -16,6 +16,8 @@ pub struct CachedFit {
     pub data_path: PathBuf,
     /// REML setting when applicable to the model family.
     pub reml: Option<bool>,
+    /// Adaptive Gauss-Hermite quadrature points for GLMMs.
+    pub n_agq: Option<usize>,
     /// Unified `lme-rs` fit representation used by LMM, GLMM, and NLMM models.
     pub fit: LmeFit,
 }
@@ -47,6 +49,7 @@ impl FitSession {
                 formula: c.formula.clone(),
                 data_path: c.data_path.clone(),
                 reml: c.reml,
+                n_agq: c.n_agq,
                 fit: c.fit.clone(),
             })
     }
@@ -64,6 +67,7 @@ impl FitSession {
                         formula: c.formula.clone(),
                         data_path: c.data_path.clone(),
                         reml: c.reml,
+                        n_agq: c.n_agq,
                         fit: c.fit.clone(),
                     },
                 )
