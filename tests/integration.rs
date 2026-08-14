@@ -1,7 +1,12 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
 use lme_rs_mcp::{load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer};
 use polars::prelude::*;
-use rmcp::{handler::server::tool::IntoCallToolResult, Json};
+use rmcp::{
+    handler::server::tool::IntoCallToolResult,
+    model::CallToolResult,
+    ErrorData,
+    Json,
+};
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -50,8 +55,9 @@ fn protocol_neutral_api_fit_lifecycle() {
 
 #[test]
 fn typed_responses_become_structured_mcp_content() {
-    let result = IntoCallToolResult::into_call_tool_result(Json(FitListSummary { fits: vec![] }))
-        .expect("structured MCP result");
+    let result: Result<CallToolResult, ErrorData> =
+        IntoCallToolResult::into_call_tool_result(Json(FitListSummary { fits: vec![] }));
+    let result = result.expect("structured MCP result");
 
     assert!(result.structured_content.is_some());
     assert!(!result.content.is_empty());
