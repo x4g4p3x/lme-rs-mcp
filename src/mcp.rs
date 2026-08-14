@@ -44,7 +44,7 @@ fn to_mcp_error(error: AgentApiError) -> McpError {
 #[tool_router(server_handler)]
 impl LmeMcpServer {
     #[tool(
-        description = "Fit a model from a CSV path and formula. Currently supports LMM (lmer) and GLMM (glmer); GLMM families: binomial, poisson, gaussian, gamma."
+        description = "Fit a model from a CSV path and formula. Supports LMM (lmer), GLMM (glmer), and built-in formula-based NLMM (nlmer); GLMM families: binomial, poisson, gaussian, gamma."
     )]
     fn fit_model(
         &self,
