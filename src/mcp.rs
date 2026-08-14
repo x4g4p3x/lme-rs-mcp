@@ -4,8 +4,11 @@ use rmcp::{handler::server::wrapper::Parameters, tool, tool_router, ErrorData as
 
 use crate::api::{AgentApiError, LmeAgentApi};
 use crate::dto::{
-    AnovaRequest, AnovaSummary, BootSummary, BootstrapRequest, FitIdRequest, FitListSummary,
-    FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
+    AnovaRequest, AnovaSummary, BootSummary, BootstrapRequest, CompareModelsRequest,
+    CompareModelsSummary, ConfidenceIntervalsRequest, ConfidenceIntervalsSummary,
+    CrossValidateRequest, CrossValidationSummary, DiagnosticsSummary, FitIdRequest,
+    FitListSummary, FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
+    ModelBootstrapRequest, PredictRequest, PredictionSummary,
 };
 
 #[derive(Clone)]
@@ -44,7 +47,7 @@ fn to_mcp_error(error: AgentApiError) -> McpError {
 #[tool_router(server_handler)]
 impl LmeMcpServer {
     #[tool(
-        description = "Fit a model from a CSV path and formula. Supports LMM (lmer), GLMM (glmer), and built-in formula-based NLMM (nlmer); GLMM families: binomial, poisson, gaussian, gamma."
+        description = "Fit an LM, LMM, GLMM, or built-in formula-based NLMM from a CSV path and formula."
     )]
     fn fit_model(
         &self,
@@ -52,6 +55,120 @@ impl LmeMcpServer {
     ) -> Result<Json<FitSummary>, McpError> {
         self.api.fit_model(request).map(Json).map_err(to_mcp_error)
     }
+
+    #[tool(description = "List cached models and essential model metadata.")]
+    fn list_models(&self) -> Json<FitListSummary> {
+        Json(self.api.list_models())
+    }
+
+    #[tool(description = "Return a structured summary for a cached model.")]
+    fn model_summary(
+        &self,
+        Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
+    ) -> Result<Json<FitSummary>, McpError> {
+        self.api
+            .model_summary(&fit_id)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(description = "Drop a cached model from the current server session.")]
+    fn forget_model(
+        &self,
+        Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
+    ) -> Result<Json<ForgetFitResult>, McpError> {
+        self.api
+            .forget_model(&fit_id)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Type I/II/III fixed-effects ANOVA for a cached LMM using Satterthwaite or Kenward-Roger denominator degrees of freedom."
+    )]
+    fn anova(
+        &self,
+        Parameters(request): Parameters<AnovaRequest>,
+    ) -> Result<Json<AnovaSummary>, McpError> {
+        self.api.anova(request).map(Json).map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Model-aware bootstrap confidence intervals. Supports LMM parametric/residual bootstrap and GLMM parametric bootstrap."
+    )]
+    fn bootstrap(
+        &self,
+        Parameters(request): Parameters<ModelBootstrapRequest>,
+    ) -> Result<Json<BootSummary>, McpError> {
+        self.api
+            .bootstrap_model(request)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Likelihood-ratio comparison of two cached nested mixed models fit to the same dataset."
+    )]
+    fn compare_models(
+        &self,
+        Parameters(request): Parameters<CompareModelsRequest>,
+    ) -> Result<Json<CompareModelsSummary>, McpError> {
+        self.api
+            .compare_models(request)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Wald or profile-likelihood confidence intervals for cached model fixed effects."
+    )]
+    fn confidence_intervals(
+        &self,
+        Parameters(request): Parameters<ConfidenceIntervalsRequest>,
+    ) -> Result<Json<ConfidenceIntervalsSummary>, McpError> {
+        self.api
+            .confidence_intervals(request)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Population-level or conditional predictions on the link or response scale using original or new CSV data."
+    )]
+    fn predict(
+        &self,
+        Parameters(request): Parameters<PredictRequest>,
+    ) -> Result<Json<PredictionSummary>, McpError> {
+        self.api.predict(request).map(Json).map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Group-preserving cross-validation for cached LMM or GLMM models."
+    )]
+    fn cross_validate(
+        &self,
+        Parameters(request): Parameters<CrossValidateRequest>,
+    ) -> Result<Json<CrossValidationSummary>, McpError> {
+        self.api
+            .cross_validate(request)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    #[tool(
+        description = "Return convergence, residual, coefficient-finiteness, and availability diagnostics for a cached model."
+    )]
+    fn diagnostics(
+        &self,
+        Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
+    ) -> Result<Json<DiagnosticsSummary>, McpError> {
+        self.api
+            .diagnostics(&fit_id)
+            .map(Json)
+            .map_err(to_mcp_error)
+    }
+
+    // Compatibility surface retained for existing clients.
 
     #[tool(description = "Fit a Gaussian linear mixed model (lmer) from a CSV path and formula.")]
     fn lme_fit(
@@ -82,11 +199,14 @@ impl LmeMcpServer {
         &self,
         Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
     ) -> Result<Json<ForgetFitResult>, McpError> {
-        self.api.forget_fit(&fit_id).map(Json).map_err(to_mcp_error)
+        self.api
+            .forget_fit(&fit_id)
+            .map(Json)
+            .map_err(to_mcp_error)
     }
 
     #[tool(
-        description = "Type I/II/III fixed-effects ANOVA for a cached LMM. Applies Satterthwaite or Kenward-Roger dfs automatically when requested."
+        description = "Compatibility Type I/II/III fixed-effects ANOVA for a cached LMM."
     )]
     fn lme_anova(
         &self,
@@ -96,7 +216,7 @@ impl LmeMcpServer {
     }
 
     #[tool(
-        description = "Parametric or residual bootstrap refits (bootMer-style) for a cached Gaussian LMM."
+        description = "Compatibility parametric or residual bootstrap refits for a cached Gaussian LMM."
     )]
     fn lme_boot(
         &self,

@@ -1,7 +1,9 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
 use lme_rs_mcp::{
-    load_csv, AgentApiError, AnovaRequest, FitListSummary, FitLmmRequest, FitModelRequest,
-    LmeAgentApi, LmeMcpServer, ModelKind,
+    load_csv, AgentApiError, AnovaRequest, CompareModelsRequest, ConfidenceIntervalMethod,
+    ConfidenceIntervalsRequest, CrossValidateRequest, FitListSummary, FitLmmRequest,
+    FitModelRequest, LmeAgentApi, LmeMcpServer, ModelBootstrapRequest, ModelKind, PredictRequest,
+    PredictionMode, PredictionScale,
 };
 use polars::prelude::*;
 use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
@@ -76,6 +78,61 @@ fn protocol_neutral_api_fit_lifecycle() {
 }
 
 #[test]
+fn semantic_lm_fit_predict_diagnostics_and_lifecycle_aliases() {
+    let api = LmeAgentApi::new();
+    let fit = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Lm,
+            formula: "Reaction ~ Days".to_string(),
+            data_path: sleepstudy_path().display().to_string(),
+            reml: None,
+            family: None,
+            link: None,
+            n_agq: None,
+            start: None,
+        })
+        .expect("fit LM through semantic API");
+
+    assert_eq!(fit.model_kind, ModelKind::Lm);
+    assert_eq!(fit.num_obs, 180);
+    assert_eq!(fit.fixed_names.len(), 2);
+    assert_eq!(fit.coefficients.len(), 2);
+
+    let listed = api.list_models();
+    assert_eq!(listed.fits.len(), 1);
+    assert_eq!(listed.fits[0].fit_id, fit.fit_id);
+
+    let summary = api
+        .model_summary(&fit.fit_id)
+        .expect("semantic model summary");
+    assert_eq!(summary.model_kind, ModelKind::Lm);
+
+    let predictions = api
+        .predict(PredictRequest {
+            fit_id: fit.fit_id.clone(),
+            data_path: None,
+            mode: PredictionMode::Population,
+            scale: PredictionScale::Response,
+            allow_new_levels: false,
+        })
+        .expect("LM population predictions");
+    assert_eq!(predictions.predictions.len(), 180);
+    assert!(predictions.predictions.iter().all(|value| value.is_finite()));
+
+    let diagnostics = api.diagnostics(&fit.fit_id).expect("LM diagnostics");
+    assert!(diagnostics.converged);
+    assert!(diagnostics.finite_coefficients);
+    assert!(diagnostics.finite_residuals);
+    assert_eq!(diagnostics.num_obs, 180);
+
+    let forgotten = api
+        .forget_model(&fit.fit_id)
+        .expect("semantic forget model");
+    assert_eq!(forgotten.forgotten, fit.fit_id);
+    assert!(api.list_models().fits.is_empty());
+}
+
+#[test]
 fn protocol_neutral_fit_model_glmm_lifecycle() {
     let api = LmeAgentApi::new();
     let fit = api
@@ -100,6 +157,21 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
     assert_eq!(fit.num_obs, 36);
     assert!(!fit.coefficients.is_empty());
 
+    let predictions = api
+        .predict(PredictRequest {
+            fit_id: fit.fit_id.clone(),
+            data_path: None,
+            mode: PredictionMode::Population,
+            scale: PredictionScale::Response,
+            allow_new_levels: false,
+        })
+        .expect("GLMM response-scale prediction");
+    assert_eq!(predictions.predictions.len(), 36);
+    assert!(predictions
+        .predictions
+        .iter()
+        .all(|value| value.is_finite() && *value >= 0.0));
+
     let listed = api.list_fits();
     assert_eq!(listed.fits.len(), 1);
     assert_eq!(listed.fits[0].model_kind, ModelKind::Glmm);
@@ -123,6 +195,36 @@ fn protocol_neutral_fit_model_glmm_lifecycle() {
 
     api.forget_fit(&fit.fit_id).expect("forget GLMM");
     assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn semantic_glmm_bootstrap_rejects_residual_method() {
+    let api = LmeAgentApi::new();
+    let fit = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Glmm,
+            formula: "y ~ x + (1 | group)".to_string(),
+            data_path: poisson_glmm_path().display().to_string(),
+            reml: None,
+            family: Some("poisson".to_string()),
+            link: None,
+            n_agq: Some(1),
+            start: None,
+        })
+        .expect("fit GLMM");
+
+    let error = api
+        .bootstrap_model(ModelBootstrapRequest {
+            fit_id: fit.fit_id,
+            nsim: 2,
+            method: "residual".to_string(),
+            reml: None,
+            seed: Some(1),
+            n_jobs: Some(1),
+            level: 0.95,
+        })
+        .expect_err("GLMM residual bootstrap must be rejected");
+    assert!(error.to_string().contains("parametric"));
 }
 
 #[test]
@@ -152,6 +254,18 @@ fn protocol_neutral_fit_model_nlmm_lifecycle() {
     assert_eq!(fit.coefficients.len(), 2);
     assert!(fit.coefficients.iter().all(|value| value.is_finite()));
 
+    let predictions = api
+        .predict(PredictRequest {
+            fit_id: fit.fit_id.clone(),
+            data_path: None,
+            mode: PredictionMode::Population,
+            scale: PredictionScale::Response,
+            allow_new_levels: false,
+        })
+        .expect("NLMM population prediction");
+    assert_eq!(predictions.predictions.len(), 40);
+    assert!(predictions.predictions.iter().all(|value| value.is_finite()));
+
     let listed = api.list_fits();
     assert_eq!(listed.fits.len(), 1);
     assert_eq!(listed.fits[0].model_kind, ModelKind::Nlmm);
@@ -176,6 +290,73 @@ fn protocol_neutral_fit_model_nlmm_lifecycle() {
 
     api.forget_fit(&fit.fit_id).expect("forget NLMM");
     assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn semantic_compare_confint_and_grouped_cv() {
+    let api = LmeAgentApi::new();
+    let reduced = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Lmm,
+            formula: "Reaction ~ 1 + (1 | Subject)".to_string(),
+            data_path: sleepstudy_path().display().to_string(),
+            reml: Some(false),
+            family: None,
+            link: None,
+            n_agq: None,
+            start: None,
+        })
+        .expect("fit reduced ML LMM");
+    let full = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Lmm,
+            formula: "Reaction ~ Days + (1 | Subject)".to_string(),
+            data_path: sleepstudy_path().display().to_string(),
+            reml: Some(false),
+            family: None,
+            link: None,
+            n_agq: None,
+            start: None,
+        })
+        .expect("fit full ML LMM");
+
+    let comparison = api
+        .compare_models(CompareModelsRequest {
+            fit_id_a: reduced.fit_id,
+            fit_id_b: full.fit_id.clone(),
+        })
+        .expect("nested LRT");
+    assert!(comparison.df > 0);
+    assert!(comparison.chi_sq.is_finite());
+    assert!(comparison.p_value.is_finite());
+
+    let ci = api
+        .confidence_intervals(ConfidenceIntervalsRequest {
+            fit_id: full.fit_id.clone(),
+            level: 0.95,
+            method: ConfidenceIntervalMethod::Wald,
+            parameters: Some(vec!["Days".to_string()]),
+        })
+        .expect("Wald confidence interval");
+    assert_eq!(ci.intervals.len(), 1);
+    assert_eq!(ci.intervals[0].name, "Days");
+    assert!(ci.intervals[0].lower.is_finite());
+    assert!(ci.intervals[0].upper.is_finite());
+
+    let cv = api
+        .cross_validate(CrossValidateRequest {
+            fit_id: full.fit_id,
+            group_col: "Subject".to_string(),
+            n_splits: 3,
+            seed: Some(7),
+            n_jobs: Some(1),
+        })
+        .expect("grouped LMM cross-validation");
+    assert_eq!(cv.oof_predictions.len(), 180);
+    assert_eq!(cv.test_fold.len(), 180);
+    assert_eq!(cv.folds.len(), 3);
+    assert!(cv.rmse.is_finite());
+    assert!(cv.mae.is_finite());
 }
 
 #[test]
@@ -228,11 +409,41 @@ fn fit_model_rejects_invalid_nlmm_start_before_io() {
 }
 
 #[test]
-fn model_kind_has_stable_protocol_names() {
+fn fit_model_lm_rejects_mixed_model_options_before_io() {
+    let api = LmeAgentApi::new();
+    let error = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Lm,
+            formula: "y ~ x".to_string(),
+            data_path: "does-not-exist.csv".to_string(),
+            reml: Some(false),
+            family: None,
+            link: None,
+            n_agq: None,
+            start: None,
+        })
+        .expect_err("LM-only field validation should happen before IO");
+    assert!(error.to_string().contains("do not apply"));
+}
+
+#[test]
+fn model_kind_and_prediction_enums_have_stable_protocol_names() {
     assert_eq!(serde_json::to_value(ModelKind::Lm).unwrap(), "lm");
     assert_eq!(serde_json::to_value(ModelKind::Lmm).unwrap(), "lmm");
     assert_eq!(serde_json::to_value(ModelKind::Glmm).unwrap(), "glmm");
     assert_eq!(serde_json::to_value(ModelKind::Nlmm).unwrap(), "nlmm");
+    assert_eq!(
+        serde_json::to_value(PredictionMode::Population).unwrap(),
+        "population"
+    );
+    assert_eq!(
+        serde_json::to_value(PredictionScale::Response).unwrap(),
+        "response"
+    );
+    assert_eq!(
+        serde_json::to_value(ConfidenceIntervalMethod::Profile).unwrap(),
+        "profile"
+    );
 }
 
 #[test]
