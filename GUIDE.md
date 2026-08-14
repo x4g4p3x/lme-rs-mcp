@@ -2,7 +2,7 @@
 
 This guide covers installing, configuring, and using the **lme-rs-mcp** Model Context Protocol server.
 
-For the underlying statistics engine, see the [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md).
+For the underlying statistics engine, see the [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md). For the target agent-facing surface and MCP/SCP architecture, see [AGENT_API.md](AGENT_API.md).
 
 ## Table of contents
 
@@ -20,13 +20,16 @@ For the underlying statistics engine, see the [lme-rs GUIDE](https://github.com/
 
 ## What this server is
 
-**lme-rs-mcp** is a thin MCP adapter around the [**lme-rs**](https://github.com/x4g4p3x/lme-rs) Rust crate. It does **not** reimplement mixed models; it:
+**lme-rs-mcp** is a thin MCP transport adapter around a protocol-neutral agent API for the [**lme-rs**](https://github.com/x4g4p3x/lme-rs) Rust crate. It does **not** reimplement mixed models; it:
 
-1. Reads a CSV from a **host path**
-2. Fits or analyzes models via `lme-rs`
-3. Returns **pretty-printed JSON** strings as MCP tool results
+1. Receives typed MCP requests
+2. Delegates statistical/session operations to `LmeAgentApi`
+3. Reads local CSV data and fits/analyzes models via `lme-rs`
+4. Returns typed MCP `structuredContent` with generated `outputSchema`
 
 Agents never send full datasets in tool arguments — only paths and formulas. That keeps payloads small and matches how local MCP servers usually work.
+
+`rmcp::Json<T>` also emits serialized text content for backwards compatibility, so existing MCP clients can continue to consume the results even if they do not yet use `structuredContent` directly.
 
 ### What it is not
 
@@ -37,22 +40,34 @@ Agents never send full datasets in tool arguments — only paths and formulas. T
 ## Architecture
 
 ```text
-┌─────────────┐    stdio MCP     ┌──────────────────┐    direct calls    ┌─────────┐
-│ MCP client  │ ◄──────────────► │  lme-rs-mcp      │ ◄────────────────► │ lme-rs  │
-│ (Cursor, …) │   JSON tools     │  (Tokio + rmcp)  │   LmeFit, etc.     │ + Polars│
-└─────────────┘                  └──────────────────┘                    └─────────┘
-                                        │
-                                        ▼
-                                 FitSession (in-memory
-                                 fit_id → LmeFit cache)
+┌─────────────┐    stdio MCP     ┌────────────────┐    typed calls    ┌──────────────┐
+│ MCP client  │ ◄──────────────► │ LmeMcpServer   │ ───────────────► │ LmeAgentApi  │
+│ (Cursor, …) │ structured JSON  │ transport only │                  │ stats/session│
+└─────────────┘                  └────────────────┘                  └──────┬───────┘
+                                                                          │
+                                                                    direct Rust calls
+                                                                          │
+                                                                          ▼
+                                                                    ┌─────────────┐
+                                                                    │ lme-rs      │
+                                                                    │ + Polars    │
+                                                                    └──────┬──────┘
+                                                                           │
+                                                                           ▼
+                                                                    FitSession
+                                                                    fit_id → LmeFit
 ```
 
 | Component | Role |
 |:----------|:-----|
-| **`lme-rs-mcp` binary** | MCP transport + tool routing |
-| **`LmeMcpServer`** | Holds `FitSession`, implements tools via `rmcp` macros |
+| **`lme-rs-mcp` binary** | Starts the stdio MCP service |
+| **`LmeMcpServer`** | Thin MCP transport + error mapping via `rmcp` macros |
+| **`LmeAgentApi`** | Protocol-neutral statistical operations and session semantics |
+| **typed DTOs** | Shared request/response contract with generated JSON schemas |
 | **`FitSession`** | `HashMap<fit_id, CachedFit>` for the process lifetime |
 | **`load_csv`** | Resolves path, optional `LME_MCP_DATA_ROOT` guard, parses CSV |
+
+The dependency direction is intentional: protocol adapters depend on `LmeAgentApi`, not the other way around. A future Science Context Protocol adapter can therefore reuse the same core without importing MCP transport code.
 
 **Transport:** stdio only (stdin/stdout). The server process runs until the MCP client disconnects.
 
@@ -149,6 +164,8 @@ Fits are **stateful inside one server process**:
 
 There is no TTL yet. Long sessions with many large fits will grow memory use.
 
+The current session stores `LmeFit` only. Generalizing that store is the prerequisite for exposing GLMM/NLMM through the same semantic model API; see [AGENT_API.md](AGENT_API.md).
+
 ## Data paths and security
 
 ### CSV only
@@ -169,11 +186,11 @@ When unset, relative paths resolve from the **server process cwd**; any readable
 
 - Treat tool output as **numeric summaries**, not automated statistical conclusions.
 - Do not point the server at sensitive paths without `LME_MCP_DATA_ROOT`.
-- Bootstrap and ANOVA can be **CPU-heavy**; use reasonable `nsim` (e.g. 200–1000, not 10000) unless you intend to wait.
+- Bootstrap and ANOVA can be **CPU-heavy**; use reasonable `nsim` (e.g. 200–1000, not 10000) unless the expensive computation is intentional.
 
 ## Tool reference
 
-All tools return a **single string** containing pretty-printed JSON (MCP text content).
+All tools return typed `rmcp::Json<T>` values. MCP clients receive both **`structuredContent`** and an **`outputSchema`** generated from the response DTO. `rmcp` also emits a serialized text representation for backwards compatibility.
 
 ### `lme_fit`
 
@@ -187,13 +204,13 @@ Fit a Gaussian linear mixed model (`lmer`).
 | `data_path` | string | *required* | Path to CSV on the server host |
 | `reml` | boolean | `true` | `true` = REML, `false` = ML |
 
-**Returns:** `FitSummary` JSON including `fit_id`, coefficients, SEs, σ², AIC/BIC, convergence flag.
+**Returns:** `FitSummary` including `fit_id`, coefficients, SEs, σ², AIC/BIC, and convergence flag.
 
 ### `lme_list_fits`
 
 **Parameters:** none.
 
-**Returns:** `{ "fits": [ FitListEntry, ... ] }` with `fit_id`, `formula`, `data_path`, `reml`, `num_obs`.
+**Returns:** `FitListSummary` with `fits[]` entries containing `fit_id`, `formula`, `data_path`, `reml`, `num_obs`.
 
 ### `lme_fit_summary`
 
@@ -203,7 +220,7 @@ Fit a Gaussian linear mixed model (`lmer`).
 |:------|:-----|:------------|
 | `fit_id` | string | Id from `lme_fit` |
 
-**Returns:** Same shape as `lme_fit` output.
+**Returns:** Same `FitSummary` shape as `lme_fit`.
 
 ### `lme_forget_fit`
 
@@ -213,13 +230,13 @@ Fit a Gaussian linear mixed model (`lmer`).
 |:------|:-----|:------------|
 | `fit_id` | string | Id to remove |
 
-**Returns:** `{ "forgotten": "<fit_id>" }` or error if unknown.
+**Returns:** `ForgetFitResult` with `forgotten: <fit_id>` or an error if unknown.
 
 ### `lme_anova`
 
 Fixed-effects ANOVA (Type I / II / III) with Satterthwaite or Kenward–Roger denominator df.
 
-The server reloads the original CSV and applies `with_satterthwaite` or `with_kenward_roger` on the cached fit before computing the table.
+The core reloads the original CSV and applies `with_satterthwaite` or `with_kenward_roger` on the cached fit before computing the table.
 
 **Parameters**
 
@@ -240,12 +257,12 @@ Parametric or residual bootstrap refits (`bootMer`-style) with percentile CIs.
 | Field | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | `fit_id` | string | *required* | Cached Gaussian LMM |
-| `nsim` | integer | `200` | Bootstrap replicates |
+| `nsim` | integer | `200` | Bootstrap replicates; must be > 0 |
 | `method` | string | `"parametric"` | `parametric` / `param` or `residual` / `res` |
 | `reml` | boolean | `true` | REML/ML for each refit |
 | `seed` | integer | null | Optional RNG seed (reproducible across `n_jobs`) |
-| `n_jobs` | integer | null | Parallel workers; `null` = all logical CPUs (capped at `nsim`) |
-| `level` | number | `0.95` | CI level for percentile intervals |
+| `n_jobs` | integer | null | Parallel workers; when provided must be > 0 |
+| `level` | number | `0.95` | CI level, strictly between 0 and 1 |
 
 **Returns:** `BootSummary` with `prop_converged`, `intervals[]` (`name`, `estimate`, `lower`, `upper`).
 
@@ -275,7 +292,7 @@ Example response (abbreviated):
   "formula": "Reaction ~ Days + (1 | Subject)",
   "converged": true,
   "fixed_names": ["(Intercept)", "Days"],
-  "coefficients": [ 251.4, 10.46 ],
+  "coefficients": [251.4, 10.46],
   "sigma2": 1943.2
 }
 ```
@@ -336,6 +353,8 @@ Tool: `lme_forget_fit`
 | Session persistence / disk cache | Not implemented |
 | crates.io `lme-rs` dep | `0.1.11` (bootstrap); optional `[patch]` for unreleased co-dev |
 
+The protocol-neutral core is now the extension point for these capabilities. The planned semantic tool surface and the upgrade sequence to current `lme-rs 0.2.x` are in [AGENT_API.md](AGENT_API.md).
+
 Statistical scope matches [lme-rs USABILITY.md](https://github.com/x4g4p3x/lme-rs/blob/master/USABILITY.md) green rows for LMM + ANOVA + bootstrap.
 
 ## Troubleshooting
@@ -374,6 +393,7 @@ MCP uses stdout for the protocol. Do not wrap the binary in scripts that `echo` 
 
 ## Related links
 
+- [Agent-facing API](AGENT_API.md)
 - [lme-rs README](https://github.com/x4g4p3x/lme-rs)
 - [lme-rs GUIDE — Bootstrap](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md#bootstrap-refits-boot_lmer)
 - [Model Context Protocol](https://modelcontextprotocol.io/)

@@ -1,6 +1,7 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
-use lme_rs_mcp::{load_csv, LmeMcpServer};
+use lme_rs_mcp::{load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer};
 use polars::prelude::*;
+use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -19,6 +20,42 @@ fn load_csv_resolves_relative_path_under_data_root() {
     assert!(path.ends_with("sleepstudy.csv"));
     assert!(df.height() > 0);
     std::env::remove_var("LME_MCP_DATA_ROOT");
+}
+
+#[test]
+fn protocol_neutral_api_fit_lifecycle() {
+    let api = LmeAgentApi::new();
+    let fit = api
+        .fit_lmm(FitLmmRequest {
+            formula: "Reaction ~ Days + (1 | Subject)".to_string(),
+            data_path: sleepstudy_path().display().to_string(),
+            reml: true,
+        })
+        .expect("fit through agent API");
+
+    assert_eq!(fit.num_obs, 180);
+    assert!(!fit.coefficients.is_empty());
+
+    let listed = api.list_fits();
+    assert_eq!(listed.fits.len(), 1);
+    assert_eq!(listed.fits[0].fit_id, fit.fit_id);
+
+    let summary = api.fit_summary(&fit.fit_id).expect("cached summary");
+    assert_eq!(summary.formula, fit.formula);
+
+    let forgotten = api.forget_fit(&fit.fit_id).expect("forget fit");
+    assert_eq!(forgotten.forgotten, fit.fit_id);
+    assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn typed_responses_become_structured_mcp_content() {
+    let result: Result<CallToolResult, ErrorData> =
+        IntoCallToolResult::into_call_tool_result(Json(FitListSummary { fits: vec![] }));
+    let result = result.expect("structured MCP result");
+
+    assert!(result.structured_content.is_some());
+    assert!(!result.content.is_empty());
 }
 
 #[test]

@@ -1,4 +1,4 @@
-//! Load tabular data from local CSV paths for MCP tool calls.
+//! Load tabular data from local CSV paths for agent-facing operations.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use polars::prelude::*;
 
-/// Resolve and load a CSV file referenced by an MCP tool.
+/// Resolve and load a CSV file referenced by an agent request.
 ///
 /// When `LME_MCP_DATA_ROOT` is set, relative `data_path` values are resolved under that
 /// directory before canonicalization. The canonical path must still lie under the root.
@@ -38,7 +38,7 @@ pub fn load_csv(data_path: &str) -> Result<(PathBuf, DataFrame)> {
     }
 
     if canonical.extension().and_then(|s| s.to_str()) != Some("csv") {
-        anyhow::bail!("only CSV files are supported in this MCP server version");
+        anyhow::bail!("only CSV files are supported by this adapter version");
     }
 
     let file = File::open(&canonical).with_context(|| format!("failed to open {canonical:?}"))?;

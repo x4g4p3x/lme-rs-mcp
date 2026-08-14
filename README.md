@@ -1,12 +1,36 @@
 # lme-rs-mcp
 
-[MCP](https://modelcontextprotocol.io/) server that exposes [**lme-rs**](https://github.com/x4g4p3x/lme-rs) linear mixed-model tools to agents and IDEs (Cursor, Claude Desktop, etc.).
+[MCP](https://modelcontextprotocol.io/) server that exposes [**lme-rs**](https://github.com/x4g4p3x/lme-rs) mixed-effects modeling operations to agents and IDEs (Cursor, Claude Desktop, etc.).
 
-The server is a **Rust binary** that calls `lme-rs` from **crates.io** (no Python runtime). It speaks MCP over **stdio**, caches fitted models in memory by `fit_id`, and returns **JSON** summaries agents can parse.
+The server is a **Rust binary** that calls `lme-rs` from **crates.io** (no Python runtime). It speaks MCP over **stdio**, caches fitted models in memory by `fit_id`, and returns typed **structured MCP results** that agents can parse reliably.
 
-**`lme-rs` is optional only in the sense that you don't clone it** — `cargo` fetches it as a dependency. You never need the MCP repo to use the library.
+`lme-rs-mcp` is only an adapter. The statistical engine remains in `lme-rs`, and the MCP repository is never required to use the library directly.
 
-## What it does
+## Architecture
+
+Statistical/session semantics are kept separate from MCP transport:
+
+```text
+MCP client
+    |
+    | stdio MCP
+    v
+LmeMcpServer
+    |
+    | typed requests / responses
+    v
+LmeAgentApi
+    |
+    | direct Rust calls
+    v
+lme-rs + Polars
+```
+
+`LmeAgentApi` is intentionally protocol-neutral. A future Science Context Protocol (SCP) adapter can reuse the same operations and DTOs without depending on MCP code or duplicating statistical logic.
+
+MCP tools return `rmcp::Json<T>`, so clients receive an MCP `outputSchema` plus `structuredContent` (with backwards-compatible text content supplied by `rmcp`).
+
+## What it does today
 
 | Capability | MCP tools |
 |:-----------|:----------|
@@ -15,7 +39,9 @@ The server is a **Rust binary** that calls `lme-rs` from **crates.io** (no Pytho
 | Fixed-effects ANOVA (Type I–III) | `lme_anova` |
 | Bootstrap CIs (`bootMer`-style) | `lme_boot` |
 
-**Scope (0.1.0):** Gaussian LMMs only. Not GLMM, NLMM, prediction, or cross-validation yet.
+**Released 0.1.0 scope:** Gaussian LMMs only. GLMM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet.
+
+The target agent-facing surface and migration path to the current `lme-rs 0.2.x` feature set are documented in **[AGENT_API.md](AGENT_API.md)**.
 
 ## Install
 
@@ -35,7 +61,7 @@ Binary: `target\release\lme-rs-mcp.exe` (Windows) or `target/release/lme-rs-mcp`
 cargo install lme-rs-mcp --locked
 ```
 
-Pulls **`lme-rs`** automatically at the version pinned in this crate's `Cargo.toml`.
+Cargo pulls the `lme-rs` version pinned in this crate's `Cargo.toml` automatically.
 
 ## Configure Cursor
 
@@ -78,23 +104,24 @@ With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that dir
 
 | Doc | Contents |
 |:----|:---------|
-| **[GUIDE.md](GUIDE.md)** | Architecture, session model, full tool reference, workflows, security, troubleshooting |
+| **[AGENT_API.md](AGENT_API.md)** | Protocol-neutral architecture, target semantic tool surface, MCP/SCP migration path |
+| **[GUIDE.md](GUIDE.md)** | Session model, full current tool reference, workflows, security, troubleshooting |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | Development, optional patch workflow, Task/CI |
 | **[AGENTS.md](AGENTS.md)** | Hooks and preflight for contributors |
 | **[RELEASING.md](RELEASING.md)** | Publish order (`lme-rs` first, then MCP) |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history |
-| [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md) | Underlying library: formulas, REML/ML, bootstrap |
+| [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md) | Underlying library: formulas, inference, bootstrap, prediction, and more |
 
 ## Requirements
 
 - **Rust** stable ([rustup](https://rustup.rs))
-- **`lme-rs`** ≥ pinned version in `Cargo.toml` (installed via Cargo)
+- **`lme-rs`** version pinned in `Cargo.toml` (installed via Cargo)
 - MCP client that spawns stdio servers (Cursor, etc.)
 - **CSV** data files readable on the machine running the server
 
 ## Status
 
-**0.1.0** — requires **`lme-rs` 0.1.11** (bootstrap). Install via Cargo; no sibling `lme-rs` clone. See [RELEASING.md](RELEASING.md) for publish steps. Validate important results against R `lme4` / `lmerTest` before publication.
+**Released version 0.1.0** requires **`lme-rs 0.1.11`**. The next migration step is to upgrade the adapter to the current `lme-rs 0.2.x` line after the protocol-neutral model/session contract is in place. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
 
 ## License
 
