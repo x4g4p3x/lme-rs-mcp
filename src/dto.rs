@@ -3,9 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Semantic model family stored in the protocol-neutral session.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[schemars(crate = "rmcp::schemars")]
 pub enum ModelKind {
