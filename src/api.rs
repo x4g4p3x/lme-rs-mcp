@@ -9,8 +9,7 @@ use std::sync::Arc;
 
 use lme_rs::family::{Family, Link};
 use lme_rs::{
-    boot_lmer, glmer_with_link, lmer, AnovaType, BootLmerMethod, DdfMethod,
-    FixedEffectsAnovaResult,
+    boot_lmer, glmer_with_link, lmer, AnovaType, BootLmerMethod, DdfMethod, FixedEffectsAnovaResult,
 };
 use uuid::Uuid;
 
@@ -335,7 +334,8 @@ fn parse_glmm_link(link: Option<&str>, family: Family) -> Result<Link, AgentApiE
     if !link.valid_for(family) {
         return Err(AgentApiError::InvalidInput(format!(
             "link '{}' is not valid for family '{}'",
-            link.name(), family
+            link.name(),
+            family
         )));
     }
     Ok(link)
