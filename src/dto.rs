@@ -29,6 +29,30 @@ impl ModelKind {
     }
 }
 
+/// Semantic model-fitting request shared by protocol adapters.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct FitModelRequest {
+    /// Statistical model family. This migration step implements `lmm` and `glmm`.
+    pub model_kind: ModelKind,
+    /// Wilkinson formula, e.g. `Reaction ~ Days + (1 | Subject)`.
+    pub formula: String,
+    /// Absolute or relative path to a CSV file on the server host.
+    pub data_path: String,
+    /// REML setting for LMMs. Defaults to true for `lmm`; invalid for `glmm`.
+    #[serde(default)]
+    pub reml: Option<bool>,
+    /// GLMM distribution family: binomial, poisson, gaussian, or gamma.
+    #[serde(default)]
+    pub family: Option<String>,
+    /// Optional GLMM link. When omitted, the canonical link for the family is used.
+    #[serde(default)]
+    pub link: Option<String>,
+    /// Adaptive Gauss-Hermite quadrature points for GLMMs. Defaults to 1.
+    #[serde(default)]
+    pub n_agq: Option<usize>,
+}
+
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitLmmRequest {
@@ -44,7 +68,7 @@ pub struct FitLmmRequest {
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitIdRequest {
-    /// Identifier returned by `lme_fit`.
+    /// Identifier returned by a fitting operation.
     pub fit_id: String,
 }
 
@@ -89,6 +113,8 @@ pub struct FitSummary {
     pub family: Option<String>,
     /// Link function for GLMMs, otherwise `None`.
     pub link: Option<String>,
+    /// Adaptive Gauss-Hermite quadrature points for GLMMs, otherwise `None`.
+    pub n_agq: Option<usize>,
     pub num_obs: usize,
     pub converged: bool,
     pub fixed_names: Vec<String>,
@@ -110,6 +136,7 @@ pub struct FitListEntry {
     pub reml: Option<bool>,
     pub family: Option<String>,
     pub link: Option<String>,
+    pub n_agq: Option<usize>,
     pub num_obs: usize,
 }
 

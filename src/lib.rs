@@ -15,8 +15,8 @@ pub use api::{AgentApiError, LmeAgentApi};
 pub use data::load_csv;
 pub use dto::{
     AnovaRequest, AnovaRow, AnovaSummary, BootConfintRow, BootSummary, BootstrapRequest,
-    FitIdRequest, FitListEntry, FitListSummary, FitLmmRequest, FitSummary, ForgetFitResult,
-    ModelKind,
+    FitIdRequest, FitListEntry, FitListSummary, FitLmmRequest, FitModelRequest, FitSummary,
+    ForgetFitResult, ModelKind,
 };
 pub use mcp::LmeMcpServer;
 pub use session::{CachedFit, FitSession};

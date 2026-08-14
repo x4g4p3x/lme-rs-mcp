@@ -1,15 +1,26 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
-use lme_rs_mcp::{load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer, ModelKind};
+use lme_rs_mcp::{
+    load_csv, AgentApiError, AnovaRequest, FitListSummary, FitLmmRequest, FitModelRequest,
+    LmeAgentApi, LmeMcpServer, ModelKind,
+};
 use polars::prelude::*;
 use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
 use std::fs::File;
 use std::path::PathBuf;
 
-fn sleepstudy_path() -> PathBuf {
+fn data_path(filename: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("data")
-        .join("sleepstudy.csv")
+        .join(filename)
+}
+
+fn sleepstudy_path() -> PathBuf {
+    data_path("sleepstudy.csv")
+}
+
+fn poisson_glmm_path() -> PathBuf {
+    data_path("poisson_glmm.csv")
 }
 
 #[test]
@@ -37,6 +48,7 @@ fn protocol_neutral_api_fit_lifecycle() {
     assert_eq!(fit.reml, Some(true));
     assert_eq!(fit.family, None);
     assert_eq!(fit.link, None);
+    assert_eq!(fit.n_agq, None);
     assert_eq!(fit.num_obs, 180);
     assert!(!fit.coefficients.is_empty());
 
@@ -45,6 +57,7 @@ fn protocol_neutral_api_fit_lifecycle() {
     assert_eq!(listed.fits[0].fit_id, fit.fit_id);
     assert_eq!(listed.fits[0].model_kind, ModelKind::Lmm);
     assert_eq!(listed.fits[0].reml, Some(true));
+    assert_eq!(listed.fits[0].n_agq, None);
 
     let summary = api.fit_summary(&fit.fit_id).expect("cached summary");
     assert_eq!(summary.formula, fit.formula);
@@ -53,6 +66,76 @@ fn protocol_neutral_api_fit_lifecycle() {
     let forgotten = api.forget_fit(&fit.fit_id).expect("forget fit");
     assert_eq!(forgotten.forgotten, fit.fit_id);
     assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn protocol_neutral_fit_model_glmm_lifecycle() {
+    let api = LmeAgentApi::new();
+    let fit = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Glmm,
+            formula: "y ~ x + (1 | group)".to_string(),
+            data_path: poisson_glmm_path().display().to_string(),
+            reml: None,
+            family: Some("Poisson".to_string()),
+            link: None,
+            n_agq: Some(1),
+        })
+        .expect("fit Poisson GLMM through semantic API");
+
+    assert_eq!(fit.model_kind, ModelKind::Glmm);
+    assert_eq!(fit.reml, None);
+    assert_eq!(fit.family.as_deref(), Some("poisson"));
+    assert_eq!(fit.link.as_deref(), Some("log"));
+    assert_eq!(fit.n_agq, Some(1));
+    assert_eq!(fit.num_obs, 36);
+    assert!(!fit.coefficients.is_empty());
+
+    let listed = api.list_fits();
+    assert_eq!(listed.fits.len(), 1);
+    assert_eq!(listed.fits[0].model_kind, ModelKind::Glmm);
+    assert_eq!(listed.fits[0].family.as_deref(), Some("poisson"));
+    assert_eq!(listed.fits[0].link.as_deref(), Some("log"));
+    assert_eq!(listed.fits[0].n_agq, Some(1));
+
+    let summary = api.fit_summary(&fit.fit_id).expect("cached GLMM summary");
+    assert_eq!(summary.model_kind, ModelKind::Glmm);
+    assert_eq!(summary.family.as_deref(), Some("poisson"));
+
+    let error = api
+        .anova(AnovaRequest {
+            fit_id: fit.fit_id.clone(),
+            ddf_method: "satterthwaite".to_string(),
+            anova_type: "III".to_string(),
+        })
+        .expect_err("LMM ANOVA must reject GLMMs");
+    assert!(error.to_string().contains("lmm models only"));
+
+    api.forget_fit(&fit.fit_id).expect("forget GLMM");
+    assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn fit_model_rejects_invalid_glmm_family_link_before_io() {
+    let api = LmeAgentApi::new();
+    let error = api
+        .fit_model(FitModelRequest {
+            model_kind: ModelKind::Glmm,
+            formula: "y ~ x + (1 | group)".to_string(),
+            data_path: "does-not-exist.csv".to_string(),
+            reml: None,
+            family: Some("poisson".to_string()),
+            link: Some("logit".to_string()),
+            n_agq: Some(1),
+        })
+        .expect_err("invalid family/link pair must be rejected");
+
+    match error {
+        AgentApiError::InvalidInput(message) => {
+            assert!(message.contains("not valid for family"));
+        }
+        other => panic!("expected InvalidInput, got {other}"),
+    }
 }
 
 #[test]

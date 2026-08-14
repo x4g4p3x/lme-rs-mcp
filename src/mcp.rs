@@ -5,7 +5,7 @@ use rmcp::{handler::server::wrapper::Parameters, tool, tool_router, ErrorData as
 use crate::api::{AgentApiError, LmeAgentApi};
 use crate::dto::{
     AnovaRequest, AnovaSummary, BootSummary, BootstrapRequest, FitIdRequest, FitListSummary,
-    FitLmmRequest, FitSummary, ForgetFitResult,
+    FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
 };
 
 #[derive(Clone)]
@@ -43,6 +43,16 @@ fn to_mcp_error(error: AgentApiError) -> McpError {
 
 #[tool_router(server_handler)]
 impl LmeMcpServer {
+    #[tool(
+        description = "Fit a model from a CSV path and formula. Currently supports LMM (lmer) and GLMM (glmer); GLMM families: binomial, poisson, gaussian, gamma."
+    )]
+    fn fit_model(
+        &self,
+        Parameters(request): Parameters<FitModelRequest>,
+    ) -> Result<Json<FitSummary>, McpError> {
+        self.api.fit_model(request).map(Json).map_err(to_mcp_error)
+    }
+
     #[tool(description = "Fit a Gaussian linear mixed model (lmer) from a CSV path and formula.")]
     fn lme_fit(
         &self,

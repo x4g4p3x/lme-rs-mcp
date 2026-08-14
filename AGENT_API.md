@@ -18,11 +18,12 @@ This keeps the statistical contract reusable if a Science Context Protocol adapt
 
 ## Current implemented surface
 
-The existing MCP names remain stable for compatibility:
+The existing MCP names remain stable for compatibility, and the first semantic fitting name is now live:
 
 | MCP tool | Core operation | Status |
 |---|---|---|
-| `lme_fit` | `LmeAgentApi::fit_lmm` | implemented |
+| `fit_model` | `LmeAgentApi::fit_model` | implemented for LMM + GLMM |
+| `lme_fit` | `LmeAgentApi::fit_lmm` | compatibility alias for LMM |
 | `lme_list_fits` | `LmeAgentApi::list_fits` | implemented |
 | `lme_fit_summary` | `LmeAgentApi::fit_summary` | implemented |
 | `lme_forget_fit` | `LmeAgentApi::forget_fit` | implemented |
@@ -31,7 +32,23 @@ The existing MCP names remain stable for compatibility:
 
 All MCP responses use typed `rmcp::Json<T>` results. This gives clients both an MCP `outputSchema` and `structuredContent` while retaining text content for backwards compatibility.
 
-The adapter now targets **`lme-rs 0.2.1`**. The current MCP fitting entry point still creates Gaussian LMMs only; the dependency upgrade and model-kind-aware session are groundwork for exposing the wider 0.2.x model surface without changing transport architecture again.
+The adapter targets **`lme-rs 0.2.1`**. `fit_model` currently accepts `model_kind = "lmm"` and `"glmm"`. GLMM requests expose family, optional link, and optional `n_agq` directly as semantic fit options.
+
+## `fit_model` semantics
+
+The request shape is intentionally model-family-aware rather than a bag of loosely interpreted options:
+
+- `model_kind`: currently `lmm` or `glmm`
+- `formula`: Wilkinson formula
+- `data_path`: CSV path on the server host
+- `reml`: optional for LMM, defaults to `true`; invalid for GLMM
+- `family`: required for GLMM; one of `binomial`, `poisson`, `gaussian`, `gamma`
+- `link`: optional for GLMM; canonical family link when omitted
+- `n_agq`: optional for GLMM, defaults to `1` and must be greater than zero
+
+Supported explicit links are `logit`, `probit`, `cloglog`, `log`, `identity`, `inverse`, and `sqrt`. Family/link compatibility is validated before data loading. Model-specific fields that do not apply are rejected rather than silently ignored.
+
+`lme_fit` remains available for existing clients and delegates to the same LMM implementation used by `fit_model`, preventing semantic drift between compatibility and new APIs.
 
 ## Target semantic surface
 
@@ -64,14 +81,13 @@ The exact set should stay deliberately small. New `lme-rs` functions should norm
 - data source
 - REML when applicable
 - GLMM family/link when applicable
+- GLMM `n_agq` when applicable
 - number of observations
 - convergence state
 
 This distinction is important: `ModelKind` describes statistical semantics, while `LmeFit` is an implementation detail of the current `lme-rs` engine. Protocol adapters should never need to inspect concrete `lme-rs` fit internals directly.
 
-The current `fit_lmm` path records `model_kind = "lmm"`, `reml = true/false`, and no family/link. Future GLMM/NLMM fit operations can reuse the same session without changing its stored fit type.
-
-Operations that remain model-family-specific must reject incompatible cached kinds explicitly. For example, the current Satterthwaite/Kenward–Roger ANOVA and `boot_lmer` adapter paths are guarded as LMM-only until family-specific semantics are added.
+Operations that remain model-family-specific must reject incompatible cached kinds explicitly. The current Satterthwaite/Kenward–Roger ANOVA and `boot_lmer` adapter paths remain LMM-only and reject GLMM handles.
 
 ## Long-running operations
 
@@ -97,11 +113,11 @@ Neither `lme-rs` nor the protocol-neutral API should depend on SCP.
 
 ## Migration sequence
 
-1. Keep the current six MCP tool names working while the semantic API evolves.
+1. Keep the compatibility MCP tool names working while the semantic API evolves.
 2. **Done:** upgrade the dependency from `lme-rs 0.1.11` to `lme-rs 0.2.1` and refresh `Cargo.lock`.
 3. **Done:** make cached model records model-kind-aware while retaining the unified upstream `LmeFit` representation.
-4. Introduce a semantic `fit_model` operation and add GLMM first, retaining `lme_fit` as the LMM compatibility entry point.
-5. Add NLMM/LM fitting plus prediction, model comparison, confidence intervals, cross-validation, and marginal means incrementally.
+4. **Done:** introduce semantic `fit_model` and add GLMM while retaining `lme_fit` as the LMM compatibility entry point.
+5. Add LM/NLMM fitting plus prediction, model comparison, confidence intervals, cross-validation, and marginal means incrementally.
 6. Introduce semantic `model_summary`, `list_models`, and `forget_model` names, initially retaining compatibility aliases where practical.
 7. Map expensive operations onto MCP Tasks once the server's supported MCP SDK/spec version is upgraded accordingly.
 8. Add an SCP adapter only as an optional outer integration layer.
