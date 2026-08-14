@@ -30,21 +30,25 @@ lme-rs + Polars
 
 MCP tools return `rmcp::Json<T>`, so clients receive an MCP `outputSchema` plus `structuredContent` (with backwards-compatible text content supplied by `rmcp`).
 
-The current adapter targets **`lme-rs 0.2.1`**. Cached records carry semantic `model_kind` metadata while using the unified upstream `LmeFit` representation, so LMM and GLMM fitting share one session model and NLMM can be added without another storage redesign.
+The current adapter targets **`lme-rs 0.2.1`**. Cached records carry semantic `model_kind` metadata while using the unified upstream `LmeFit` representation, so LMM, GLMM, and NLMM fitting share one session model.
 
 ## What it does today
 
 | Capability | MCP tools |
 |:-----------|:----------|
-| Semantic LMM/GLMM fitting from CSV | `fit_model` |
+| Semantic LMM/GLMM/NLMM fitting from CSV | `fit_model` |
 | Backwards-compatible Gaussian LMM fitting | `lme_fit` |
 | Session management | `lme_list_fits`, `lme_fit_summary`, `lme_forget_fit` |
 | Fixed-effects ANOVA (Type I–III, LMM only) | `lme_anova` |
 | Bootstrap CIs (`bootMer`-style, LMM only) | `lme_boot` |
 
-`fit_model` currently accepts `model_kind = "lmm"` or `"glmm"`. GLMM families are **binomial**, **poisson**, **gaussian**, and **gamma**. The link is optional; when omitted the family’s canonical link is used. Explicit supported links are `logit`, `probit`, `cloglog`, `log`, `identity`, `inverse`, and `sqrt`, subject to family/link compatibility. GLMM `n_agq` defaults to `1`.
+`fit_model` accepts `model_kind = "lmm"`, `"glmm"`, or `"nlmm"`.
 
-LM, NLMM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet. Fit/list/summary results include `model_kind`, optional REML, GLMM family/link, and optional `n_agq` metadata.
+GLMM families are **binomial**, **poisson**, **gaussian**, and **gamma**. The link is optional; when omitted the family’s canonical link is used. Explicit supported links are `logit`, `probit`, `cloglog`, `log`, `identity`, `inverse`, and `sqrt`, subject to family/link compatibility. GLMM `n_agq` defaults to `1`.
+
+NLMM uses the upstream three-part `nlmer` formula syntax with built-in nonlinear means such as `SSlogis`, `SSasymp`, `SSfol`, `SSmicmen`, `SSgompertz`, `SSpower`, `SSfpl`, `SSbiexp`, and `SSweibull`. Named `start` values are optional; omitting them requests `lme-rs` self-start heuristics. NLMM defaults to ML (`reml = false`) and `n_agq = 1`.
+
+LM, prediction, model comparison, confidence intervals, and cross-validation are not exposed yet. Fit/list/summary results include `model_kind`, applicable REML/family/link/`n_agq` metadata, and user-supplied NLMM starting values when present.
 
 The target agent-facing surface and migration sequence are documented in **[AGENT_API.md](AGENT_API.md)**.
 
@@ -87,9 +91,9 @@ Add to **Cursor Settings → MCP** (or your `mcp.json`):
 
 Use a **release build path** or the `cargo install` binary. Point `LME_MCP_DATA_ROOT` at a folder of CSV files you want agents to read.
 
-### Typical agent workflow
+### Typical agent workflows
 
-For new integrations, prefer `fit_model`:
+For a GLMM:
 
 ```json
 {
@@ -103,6 +107,23 @@ For new integrations, prefer `fit_model`:
 
 The canonical `log` link is selected automatically. To request a noncanonical valid link, add `"link": "identity"` (or another family-compatible link).
 
+For a built-in nonlinear mixed model:
+
+```json
+{
+  "model_kind": "nlmm",
+  "formula": "y ~ SSmicmen(x, Vmax, K) ~ Vmax|g",
+  "data_path": "enzyme.csv",
+  "start": {
+    "Vmax": 10.0,
+    "K": 1.5
+  },
+  "n_agq": 1
+}
+```
+
+`start` can be omitted to use the upstream self-start heuristics. `reml` is also optional for NLMM and defaults to `false` (ML).
+
 For existing LMM clients, `lme_fit` remains supported unchanged:
 
 ```json
@@ -113,7 +134,7 @@ For existing LMM clients, `lme_fit` remains supported unchanged:
 }
 ```
 
-Both fitting entry points return a `fit_id`. Use the existing session tools to inspect or forget that model. `lme_anova` and `lme_boot` currently accept LMM fits only and reject cached GLMMs explicitly.
+All fitting entry points return a `fit_id`. Use the existing session tools to inspect or forget that model. `lme_anova` and `lme_boot` currently accept LMM fits only and reject cached GLMM/NLMM fits explicitly.
 
 With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that directory (filename-only is fine).
 
@@ -127,7 +148,7 @@ With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that dir
 | **[AGENTS.md](AGENTS.md)** | Hooks and preflight for contributors |
 | **[RELEASING.md](RELEASING.md)** | Publish order (`lme-rs` first, then MCP) |
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history |
-| [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md) | Underlying library: formulas, inference, bootstrap, prediction, and more |
+| [lme-rs GUIDE](https://github.com/x4g4p3x/lme-rs/blob/master/GUIDE.md) | Underlying library: formulas, inference, bootstrap, prediction, NLMM, and more |
 
 ## Requirements
 
@@ -138,7 +159,7 @@ With `LME_MCP_DATA_ROOT` set, relative `data_path` values resolve under that dir
 
 ## Status
 
-The published **0.1.0** release used `lme-rs 0.1.11`. Current master development targets **`lme-rs 0.2.1`**, uses a model-kind-aware session contract, and exposes semantic LMM/GLMM fitting through `fit_model` while retaining `lme_fit` for compatibility. The next fitting step is LM/NLMM support; the next broader API step is to add semantic model lifecycle aliases and then prediction/model-comparison/inference operations incrementally. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
+The published **0.1.0** release used `lme-rs 0.1.11`. Current master development targets **`lme-rs 0.2.1`**, uses a model-kind-aware session contract, and exposes semantic LMM/GLMM/NLMM fitting through `fit_model` while retaining `lme_fit` for compatibility. The remaining fitting-family step is ordinary LM support; after that the highest-value semantic expansion is prediction, followed by model comparison/inference operations. Validate publication-critical results against R `lme4` / `lmerTest` as appropriate.
 
 ## License
 

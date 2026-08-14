@@ -1,6 +1,6 @@
 //! In-memory cache of fitted models keyed by `fit_id`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -16,8 +16,10 @@ pub struct CachedFit {
     pub data_path: PathBuf,
     /// REML setting when applicable to the model family.
     pub reml: Option<bool>,
-    /// Adaptive Gauss-Hermite quadrature points for GLMMs.
+    /// Adaptive Gauss-Hermite quadrature points for GLMM/NLMM.
     pub n_agq: Option<usize>,
+    /// User-provided NLMM starting values; `None` means self-start was requested.
+    pub start: Option<BTreeMap<String, f64>>,
     /// Unified `lme-rs` fit representation used by LMM, GLMM, and NLMM models.
     pub fit: LmeFit,
 }
@@ -50,6 +52,7 @@ impl FitSession {
                 data_path: c.data_path.clone(),
                 reml: c.reml,
                 n_agq: c.n_agq,
+                start: c.start.clone(),
                 fit: c.fit.clone(),
             })
     }
@@ -68,6 +71,7 @@ impl FitSession {
                         data_path: c.data_path.clone(),
                         reml: c.reml,
                         n_agq: c.n_agq,
+                        start: c.start.clone(),
                         fit: c.fit.clone(),
                     },
                 )

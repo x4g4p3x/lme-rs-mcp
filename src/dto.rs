@@ -1,5 +1,7 @@
 //! Protocol-neutral request and response types for agent-facing operations.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Semantic model family stored in the protocol-neutral session.
@@ -33,13 +35,13 @@ impl ModelKind {
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitModelRequest {
-    /// Statistical model family. This migration step implements `lmm` and `glmm`.
+    /// Statistical model family. This migration step implements `lmm`, `glmm`, and `nlmm`.
     pub model_kind: ModelKind,
-    /// Wilkinson formula, e.g. `Reaction ~ Days + (1 | Subject)`.
+    /// Model formula. LMM/GLMM use Wilkinson syntax; NLMM uses the three-part `nlmer` syntax.
     pub formula: String,
     /// Absolute or relative path to a CSV file on the server host.
     pub data_path: String,
-    /// REML setting for LMMs. Defaults to true for `lmm`; invalid for `glmm`.
+    /// REML setting for LMM/NLMM. Defaults to true for LMM and false for NLMM; invalid for GLMM.
     #[serde(default)]
     pub reml: Option<bool>,
     /// GLMM distribution family: binomial, poisson, gaussian, or gamma.
@@ -48,9 +50,13 @@ pub struct FitModelRequest {
     /// Optional GLMM link. When omitted, the canonical link for the family is used.
     #[serde(default)]
     pub link: Option<String>,
-    /// Adaptive Gauss-Hermite quadrature points for GLMMs. Defaults to 1.
+    /// Adaptive Gauss-Hermite quadrature points for GLMM/NLMM. Defaults to 1.
     #[serde(default)]
     pub n_agq: Option<usize>,
+    /// Optional named starting values for NLMM population parameters.
+    /// Omit to use the built-in self-start heuristics.
+    #[serde(default)]
+    pub start: Option<BTreeMap<String, f64>>,
 }
 
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
@@ -113,8 +119,10 @@ pub struct FitSummary {
     pub family: Option<String>,
     /// Link function for GLMMs, otherwise `None`.
     pub link: Option<String>,
-    /// Adaptive Gauss-Hermite quadrature points for GLMMs, otherwise `None`.
+    /// Adaptive Gauss-Hermite quadrature points for GLMM/NLMM, otherwise `None`.
     pub n_agq: Option<usize>,
+    /// User-provided NLMM starting values; `None` means built-in self-start heuristics were requested.
+    pub start: Option<BTreeMap<String, f64>>,
     pub num_obs: usize,
     pub converged: bool,
     pub fixed_names: Vec<String>,
@@ -137,6 +145,7 @@ pub struct FitListEntry {
     pub family: Option<String>,
     pub link: Option<String>,
     pub n_agq: Option<usize>,
+    pub start: Option<BTreeMap<String, f64>>,
     pub num_obs: usize,
 }
 
