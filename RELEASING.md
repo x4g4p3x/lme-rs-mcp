@@ -1,48 +1,50 @@
 # Releasing lme-rs-mcp
 
-This crate depends on **`lme-rs` from crates.io**. Publish **`lme-rs` first**, then **`lme-rs-mcp`**.
+This crate depends on **`lme-rs` from crates.io**. Publish the `lme-rs` version pinned in `Cargo.toml` first, then publish **`lme-rs-mcp`**.
 
-## 1. Publish `lme-rs` 0.1.11
+Current master development pins **`lme-rs 0.2.1`**.
 
-In the [lme-rs](https://github.com/x4g4p3x/lme-rs) repository (see [RELEASING.md](../lme-rs/RELEASING.md)):
+## 1. Ensure the pinned `lme-rs` release is published
+
+In the [lme-rs](https://github.com/x4g4p3x/lme-rs) repository, run its release checks and publish/tag the version referenced by this repository's `Cargo.toml`.
+
+For the current pin, crates.io must serve `lme-rs 0.2.1` before an MCP release is prepared.
+
+Verify with:
 
 ```powershell
-task ci                    # or full pre-release checks
-cargo publish --dry-run --allow-dirty
-git add -A && git commit -m "Release 0.1.11"
-git tag v0.1.11
-git push origin HEAD --tags
+cargo search lme-rs
 ```
-
-Push the `v0.1.11` tag (or run `cargo publish` locally with `CARGO_REGISTRY_TOKEN`) so **crates.io** serves `lme-rs` 0.1.11.
-
-Wait until `cargo search lme-rs` shows `0.1.11`.
 
 ## 2. Refresh this repo's lockfile
 
-Remove any local patch (delete `.cargo/config.toml` or drop the `[patch.crates-io]` section), then:
+Remove any local patch (delete `.cargo/config.toml` or drop the `[patch.crates-io]` section), then resolve the exact pinned version:
 
 ```powershell
 cd lme-rs-mcp
-cargo update -p lme-rs
+cargo update -p lme-rs --precise 0.2.1
 cargo test --locked
 task ci
 ```
 
-Commit the updated **`Cargo.lock`** (registry checksums for `lme-rs` 0.1.11). CI is single-repo and needs this lockfile.
+Commit the updated **`Cargo.lock`** with the registry checksum for the pinned `lme-rs` release. CI is single-repo and relies on this lockfile.
 
 ## 3. Publish `lme-rs-mcp`
 
+Before publishing, bump the MCP crate version in `Cargo.toml` and update `CHANGELOG.md`. Then:
+
 ```powershell
 cargo publish --dry-run --locked
-git tag v0.1.0
+git tag v<MCP_VERSION>
 git push origin HEAD --tags
 cargo publish --locked   # when ready
 ```
 
+Do not reuse an already-published crates.io version.
+
 ## Co-development (optional)
 
-After 0.1.11 is on crates.io, you only need `task patch:local` when hacking **unreleased** `lme-rs` APIs on a sibling checkout.
+You only need `task patch:local` when hacking **unreleased** `lme-rs` APIs on a sibling checkout. Release validation should remove the local patch and resolve the crates.io package into `Cargo.lock`.
 
 ## MCP client config
 
