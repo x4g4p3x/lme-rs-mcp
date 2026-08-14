@@ -62,7 +62,7 @@ cargo test --locked
 task ci
 ```
 
-The integration suite vendors both the Gaussian `sleepstudy.csv` fixture and a small Poisson random-intercept GLMM fixture.
+The integration suite vendors the Gaussian `sleepstudy.csv` fixture, a small Poisson random-intercept GLMM fixture, and a deterministic Michaelis-Menten NLMM fixture.
 
 ## Client configuration
 
@@ -101,11 +101,12 @@ Fits are stateful inside one server process. Both `fit_model` and `lme_fit` retu
 
 Cached records contain:
 
-- `model_kind` (`lmm` or `glmm` today; `lm`/`nlmm` reserved for later)
+- `model_kind` (`lmm`, `glmm`, or `nlmm` today; `lm` reserved for later)
 - formula and CSV path
 - optional REML setting
 - optional GLMM family/link
-- optional GLMM `n_agq`
+- optional GLMM/NLMM `n_agq`
+- optional user-supplied NLMM `start` values
 - the unified upstream `LmeFit`
 
 A server restart clears the session. `lme_forget_fit` removes an individual cached model. There is no TTL or disk persistence yet.
@@ -116,26 +117,20 @@ All tools return typed `rmcp::Json<T>` responses. Clients receive structured JSO
 
 ### `fit_model`
 
-Semantic fitting entry point. Currently implements LMM and GLMM.
+Semantic fitting entry point. Currently implements LMM, GLMM, and built-in formula-based NLMM.
 
 | Field | Type | Default | Semantics |
 |:--|:--|:--|:--|
-| `model_kind` | `"lmm"` / `"glmm"` | required | Statistical model kind |
-| `formula` | string | required | Wilkinson formula |
+| `model_kind` | `"lmm"` / `"glmm"` / `"nlmm"` | required | Statistical model kind |
+| `formula` | string | required | Wilkinson syntax for LMM/GLMM; three-part `nlmer` syntax for NLMM |
 | `data_path` | string | required | CSV path on server host |
-| `reml` | boolean/null | `true` for LMM | LMM only; invalid for GLMM |
-| `family` | string/null | required for GLMM | `binomial`, `poisson`, `gaussian`, `gamma` |
+| `reml` | boolean/null | `true` LMM; `false` NLMM | Valid for LMM/NLMM; invalid for GLMM |
+| `family` | string/null | required for GLMM | GLMM only: `binomial`, `poisson`, `gaussian`, `gamma` |
 | `link` | string/null | canonical family link | GLMM only |
-| `n_agq` | integer/null | `1` for GLMM | Must be greater than zero |
+| `n_agq` | integer/null | `1` for GLMM/NLMM | Must be greater than zero |
+| `start` | object/null | self-start for NLMM | NLMM only; parameter name → finite numeric starting value |
 
-Supported explicit links are:
-
-- Binomial: `logit`, `probit`, `cloglog`
-- Poisson: `log`, `identity`, `sqrt`
-- Gaussian: `identity`, `log`, `inverse`
-- Gamma: `inverse`, `identity`, `log`
-
-Model-specific options are validated. For example, `reml` on a GLMM and `family` on an LMM are errors rather than ignored fields.
+Model-specific options are validated. Inapplicable fields are errors rather than silently ignored.
 
 #### LMM example
 
@@ -149,6 +144,15 @@ Model-specific options are validated. For example, `reml` on a GLMM and `family`
 ```
 
 If `reml` is omitted for `lmm`, it defaults to `true`.
+
+#### GLMM links
+
+Supported explicit links are:
+
+- Binomial: `logit`, `probit`, `cloglog`
+- Poisson: `log`, `identity`, `sqrt`
+- Gaussian: `identity`, `log`, `inverse`
+- Gamma: `inverse`, `identity`, `log`
 
 #### Poisson GLMM example
 
@@ -173,11 +177,68 @@ A GLMM response includes metadata such as:
   "family": "poisson",
   "link": "log",
   "n_agq": 1,
+  "start": null,
   "reml": null,
   "num_obs": 36,
   "converged": true
 }
 ```
+
+#### NLMM formula syntax
+
+NLMM delegates to `lme-rs 0.2.1` `nlmer_with_options` and uses its three-part formula syntax:
+
+```text
+response ~ nonlinear_mean(covariate, parameters...) ~ random_parameters|group
+```
+
+Examples include:
+
+```text
+y ~ SSmicmen(x, Vmax, K) ~ Vmax|g
+y ~ SSlogis(x, Asym, xmid, scal) ~ Asym + xmid|Subject
+y ~ SSasymp(x, Asym, R0, lrc) ~ Asym|group
+```
+
+Built-in means currently available through the upstream parser include `SSlogis`, `SSasymp`, `SSfol`, `SSmicmen`, `SSgompertz`, `SSpower`, `SSfpl`, `SSbiexp`, and `SSweibull`.
+
+#### NLMM example with explicit starts
+
+```json
+{
+  "model_kind": "nlmm",
+  "formula": "y ~ SSmicmen(x, Vmax, K) ~ Vmax|g",
+  "data_path": "enzyme.csv",
+  "reml": false,
+  "n_agq": 1,
+  "start": {
+    "Vmax": 10.0,
+    "K": 1.5
+  }
+}
+```
+
+`reml` defaults to `false` (ML) for NLMM. `n_agq` defaults to `1`. Omit `start` entirely to request the upstream data-driven self-start heuristics and fallback behavior.
+
+An NLMM response preserves the user-supplied fitting metadata:
+
+```json
+{
+  "fit_id": "...",
+  "model_kind": "nlmm",
+  "reml": false,
+  "family": null,
+  "link": null,
+  "n_agq": 1,
+  "start": {
+    "K": 1.5,
+    "Vmax": 10.0
+  },
+  "num_obs": 40
+}
+```
+
+Custom Rust NLMM mean closures, population/group bounds, and optimizer iteration controls are not exposed by MCP in this increment. Use the `lme-rs` library directly when those lower-level controls are required.
 
 ### `lme_fit`
 
@@ -193,7 +254,7 @@ Backwards-compatible Gaussian LMM entry point. It delegates to the same semantic
 
 ### `lme_list_fits`
 
-No parameters. Returns all cached `fit_id` values plus model metadata: `model_kind`, formula, path, optional REML/family/link/`n_agq`, and observation count.
+No parameters. Returns all cached `fit_id` values plus model metadata: `model_kind`, formula, path, applicable REML/family/link/`n_agq`, optional NLMM `start`, and observation count.
 
 ### `lme_fit_summary`
 
@@ -215,7 +276,7 @@ Drops one cached model.
 
 Fixed-effects Type I/II/III ANOVA with Satterthwaite or Kenward–Roger denominator degrees of freedom.
 
-**Current restriction:** LMM only. Passing a GLMM `fit_id` is rejected explicitly.
+**Current restriction:** LMM only. Passing a GLMM or NLMM `fit_id` is rejected explicitly.
 
 ```json
 {
@@ -231,7 +292,7 @@ Accepted denominator-df names include `satterthwaite`/`sat` and `kenward-roger`/
 
 Parametric or residual `bootMer`-style bootstrap refits with percentile intervals.
 
-**Current restriction:** Gaussian LMM only. Passing a GLMM `fit_id` is rejected explicitly.
+**Current restriction:** Gaussian LMM only. Passing a GLMM or NLMM `fit_id` is rejected explicitly.
 
 ```json
 {
@@ -249,7 +310,18 @@ Parametric or residual `bootMer`-style bootstrap refits with percentile interval
 
 ## Workflows
 
-### New semantic GLMM workflow
+### New semantic NLMM workflow
+
+1. Call `fit_model` with `model_kind = "nlmm"`, a three-part formula, and CSV path.
+2. Supply `start` only when you want explicit initial population parameters; otherwise use self-start.
+3. Check `converged`, `reml`, `n_agq`, and the returned parameter estimates.
+4. Keep the returned `fit_id` for session inspection.
+5. Use `lme_fit_summary` / `lme_list_fits` as needed.
+6. Call `lme_forget_fit` when the model is no longer needed.
+
+Current `lme_anova` / `lme_boot` operations do not accept NLMM handles.
+
+### Semantic GLMM workflow
 
 1. Call `fit_model` with `model_kind = "glmm"`, formula, CSV, and family.
 2. Check `converged`, `family`, `link`, and `n_agq` in the returned summary.
@@ -273,8 +345,10 @@ GLMM ANOVA/bootstrap are not yet exposed through the current inference tools.
 - Keep the `fit_id`; cached models are in-process only.
 - Prefer `LME_MCP_DATA_ROOT` so agents can use safe filename-relative paths.
 - Check `converged` before interpreting downstream statistics.
-- Do not send family/link options that do not belong to the selected model kind.
+- Do not send model-specific options that do not belong to the selected model kind.
 - For GLMMs, omit `link` when the canonical link is desired.
+- For NLMMs, omit `start` when the upstream self-start behavior is desired; when supplied, use finite named numeric values.
+- Keep `n_agq` intentional: higher values can increase nonlinear/generalized mixed-model cost.
 
 ## Current limitations
 
@@ -284,19 +358,20 @@ GLMM ANOVA/bootstrap are not yet exposed through the current inference tools.
 | GLMM / `glmer` | Exposed via `fit_model` |
 | GLMM families | Binomial, Poisson, Gaussian, Gamma |
 | Explicit GLMM links | Supported with family compatibility checks |
+| NLMM / `nlmer` | Built-in formula-based means exposed via `fit_model` |
+| NLMM custom Rust means/bounds/optimizer knobs | Library-level only |
 | LM | Not exposed yet |
-| NLMM | Not exposed yet |
 | Prediction | Not exposed yet |
 | Model comparison | Not exposed yet |
 | Confidence intervals | Not exposed yet |
 | Cross-validation | Not exposed yet |
 | Marginal means | Not exposed yet |
-| GLMM inference via `lme_anova` / `lme_boot` | Not exposed; tools remain LMM-only |
+| GLMM/NLMM inference via `lme_anova` / `lme_boot` | Not exposed; tools remain LMM-only |
 | Parquet / Arrow input | Not exposed; CSV only |
 | Session persistence | Not implemented |
 | crates.io `lme-rs` dependency | `0.2.1` |
 
-The next fitting expansion is LM/NLMM. The broader semantic API will then add model lifecycle aliases (`model_summary`, `list_models`, `forget_model`) and operations such as prediction, comparison, confidence intervals, cross-validation, and marginal means incrementally.
+The remaining fitting-family expansion is ordinary LM. The next high-value semantic operation after that is prediction, followed by model comparison, confidence intervals, cross-validation, and marginal means incrementally.
 
 ## Troubleshooting
 
@@ -322,11 +397,19 @@ Choose a compatible family/link pair or omit `link` to use the canonical link.
 
 ### `reml does not apply to glmm models`
 
-Remove the `reml` field from the GLMM request. REML is an LMM option in this API.
+Remove the `reml` field from the GLMM request. REML is available for LMM and NLMM in this API.
+
+### `start applies to nlmm models only`
+
+Remove `start` from LMM/GLMM requests. For NLMM, either supply a parameter-name map or omit the field for self-start.
+
+### `nlmm start value ... must be finite`
+
+Replace NaN/infinite programmatic values with finite numeric starts, or omit `start` to use the upstream self-start heuristics.
 
 ### Fit or bootstrap is slow
 
-GLMM optimization, AGQ, and bootstrap refits can be CPU-heavy. Keep `n_agq`, `nsim`, and parallelism intentional for model size.
+GLMM/NLMM optimization, AGQ, and bootstrap refits can be CPU-heavy. Keep `n_agq`, `nsim`, and parallelism intentional for model size.
 
 ### stdout pollution
 
