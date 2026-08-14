@@ -1,5 +1,7 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
-use lme_rs_mcp::{load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer};
+use lme_rs_mcp::{
+    load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer, ModelKind,
+};
 use polars::prelude::*;
 use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
 use std::fs::File;
@@ -33,19 +35,34 @@ fn protocol_neutral_api_fit_lifecycle() {
         })
         .expect("fit through agent API");
 
+    assert_eq!(fit.model_kind, ModelKind::Lmm);
+    assert_eq!(fit.reml, Some(true));
+    assert_eq!(fit.family, None);
+    assert_eq!(fit.link, None);
     assert_eq!(fit.num_obs, 180);
     assert!(!fit.coefficients.is_empty());
 
     let listed = api.list_fits();
     assert_eq!(listed.fits.len(), 1);
     assert_eq!(listed.fits[0].fit_id, fit.fit_id);
+    assert_eq!(listed.fits[0].model_kind, ModelKind::Lmm);
+    assert_eq!(listed.fits[0].reml, Some(true));
 
     let summary = api.fit_summary(&fit.fit_id).expect("cached summary");
     assert_eq!(summary.formula, fit.formula);
+    assert_eq!(summary.model_kind, ModelKind::Lmm);
 
     let forgotten = api.forget_fit(&fit.fit_id).expect("forget fit");
     assert_eq!(forgotten.forgotten, fit.fit_id);
     assert!(api.list_fits().fits.is_empty());
+}
+
+#[test]
+fn model_kind_has_stable_protocol_names() {
+    assert_eq!(serde_json::to_value(ModelKind::Lm).unwrap(), "lm");
+    assert_eq!(serde_json::to_value(ModelKind::Lmm).unwrap(), "lmm");
+    assert_eq!(serde_json::to_value(ModelKind::Glmm).unwrap(), "glmm");
+    assert_eq!(serde_json::to_value(ModelKind::Nlmm).unwrap(), "nlmm");
 }
 
 #[test]
