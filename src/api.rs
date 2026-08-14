@@ -7,13 +7,18 @@
 
 use std::sync::Arc;
 
-use lme_rs::{boot_lmer, lmer, AnovaType, BootLmerMethod, DdfMethod, FixedEffectsAnovaResult};
+use lme_rs::family::{Family, Link};
+use lme_rs::{
+    boot_lmer, glmer_with_link, lmer, AnovaType, BootLmerMethod, DdfMethod,
+    FixedEffectsAnovaResult,
+};
 use uuid::Uuid;
 
 use crate::data::load_csv;
 use crate::dto::{
     AnovaRequest, AnovaRow, AnovaSummary, BootConfintRow, BootSummary, BootstrapRequest,
-    FitListEntry, FitListSummary, FitLmmRequest, FitSummary, ForgetFitResult, ModelKind,
+    FitListEntry, FitListSummary, FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
+    ModelKind,
 };
 use crate::session::{CachedFit, FitSession};
 
@@ -39,33 +44,33 @@ impl LmeAgentApi {
         }
     }
 
-    pub fn fit_lmm(&self, request: FitLmmRequest) -> Result<FitSummary, AgentApiError> {
-        if request.formula.trim().is_empty() {
-            return Err(AgentApiError::InvalidInput(
-                "formula must not be empty".to_string(),
-            ));
-        }
-        if request.data_path.trim().is_empty() {
-            return Err(AgentApiError::InvalidInput(
-                "data_path must not be empty".to_string(),
-            ));
-        }
+    /// Fit an LMM or GLMM through the protocol-neutral semantic API.
+    pub fn fit_model(&self, request: FitModelRequest) -> Result<FitSummary, AgentApiError> {
+        validate_fit_input(&request.formula, &request.data_path)?;
 
-        let (path, df) =
-            load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
-        let fit = lmer(&request.formula, &df, request.reml)
-            .map_err(|e| AgentApiError::Computation(e.to_string()))?;
-        let fit_id = Uuid::new_v4().to_string();
-        let cached = CachedFit {
+        match request.model_kind {
+            ModelKind::Lmm => self.fit_model_lmm(request),
+            ModelKind::Glmm => self.fit_model_glmm(request),
+            ModelKind::Lm => Err(AgentApiError::InvalidInput(
+                "fit_model does not expose lm yet; use model_kind 'lmm' or 'glmm'".to_string(),
+            )),
+            ModelKind::Nlmm => Err(AgentApiError::InvalidInput(
+                "fit_model does not expose nlmm yet; use model_kind 'lmm' or 'glmm'".to_string(),
+            )),
+        }
+    }
+
+    /// Backwards-compatible Gaussian LMM fitting entry point used by `lme_fit`.
+    pub fn fit_lmm(&self, request: FitLmmRequest) -> Result<FitSummary, AgentApiError> {
+        self.fit_model(FitModelRequest {
             model_kind: ModelKind::Lmm,
             formula: request.formula,
-            data_path: path,
+            data_path: request.data_path,
             reml: Some(request.reml),
-            fit,
-        };
-        let summary = fit_summary_from_cached(&fit_id, &cached);
-        self.session.insert(fit_id, cached);
-        Ok(summary)
+            family: None,
+            link: None,
+            n_agq: None,
+        })
     }
 
     pub fn list_fits(&self) -> FitListSummary {
@@ -79,8 +84,9 @@ impl LmeAgentApi {
                 formula: cached.formula,
                 data_path: cached.data_path.display().to_string(),
                 reml: cached.reml,
-                family: cached.fit.family_name.clone(),
-                link: cached.fit.link_name.clone(),
+                family: normalized_name(cached.fit.family_name.as_deref()),
+                link: normalized_name(cached.fit.link_name.as_deref()),
+                n_agq: cached.n_agq,
                 num_obs: cached.fit.num_obs,
             })
             .collect();
@@ -191,6 +197,84 @@ impl LmeAgentApi {
         })
     }
 
+    fn fit_model_lmm(&self, request: FitModelRequest) -> Result<FitSummary, AgentApiError> {
+        if request.family.is_some() {
+            return Err(AgentApiError::InvalidInput(
+                "family applies to glmm models only".to_string(),
+            ));
+        }
+        if request.link.is_some() {
+            return Err(AgentApiError::InvalidInput(
+                "link applies to glmm models only".to_string(),
+            ));
+        }
+        if request.n_agq.is_some() {
+            return Err(AgentApiError::InvalidInput(
+                "n_agq applies to glmm models only".to_string(),
+            ));
+        }
+
+        let reml = request.reml.unwrap_or(true);
+        let (path, df) =
+            load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
+        let fit = lmer(&request.formula, &df, reml)
+            .map_err(|e| AgentApiError::Computation(e.to_string()))?;
+        self.cache_fit(ModelKind::Lmm, request.formula, path, Some(reml), None, fit)
+    }
+
+    fn fit_model_glmm(&self, request: FitModelRequest) -> Result<FitSummary, AgentApiError> {
+        if request.reml.is_some() {
+            return Err(AgentApiError::InvalidInput(
+                "reml does not apply to glmm models".to_string(),
+            ));
+        }
+
+        let family = parse_glmm_family(request.family.as_deref())?;
+        let link = parse_glmm_link(request.link.as_deref(), family)?;
+        let n_agq = request.n_agq.unwrap_or(1);
+        if n_agq == 0 {
+            return Err(AgentApiError::InvalidInput(
+                "n_agq must be greater than zero".to_string(),
+            ));
+        }
+
+        let (path, df) =
+            load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
+        let fit = glmer_with_link(&request.formula, &df, family, link, n_agq)
+            .map_err(|e| AgentApiError::Computation(e.to_string()))?;
+        self.cache_fit(
+            ModelKind::Glmm,
+            request.formula,
+            path,
+            None,
+            Some(n_agq),
+            fit,
+        )
+    }
+
+    fn cache_fit(
+        &self,
+        model_kind: ModelKind,
+        formula: String,
+        data_path: std::path::PathBuf,
+        reml: Option<bool>,
+        n_agq: Option<usize>,
+        fit: lme_rs::LmeFit,
+    ) -> Result<FitSummary, AgentApiError> {
+        let fit_id = Uuid::new_v4().to_string();
+        let cached = CachedFit {
+            model_kind,
+            formula,
+            data_path,
+            reml,
+            n_agq,
+            fit,
+        };
+        let summary = fit_summary_from_cached(&fit_id, &cached);
+        self.session.insert(fit_id, cached);
+        Ok(summary)
+    }
+
     fn cached_fit(&self, fit_id: &str) -> Result<CachedFit, AgentApiError> {
         self.session
             .get(fit_id)
@@ -204,6 +288,59 @@ impl Default for LmeAgentApi {
     }
 }
 
+fn validate_fit_input(formula: &str, data_path: &str) -> Result<(), AgentApiError> {
+    if formula.trim().is_empty() {
+        return Err(AgentApiError::InvalidInput(
+            "formula must not be empty".to_string(),
+        ));
+    }
+    if data_path.trim().is_empty() {
+        return Err(AgentApiError::InvalidInput(
+            "data_path must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_glmm_family(family: Option<&str>) -> Result<Family, AgentApiError> {
+    let family = family.ok_or_else(|| {
+        AgentApiError::InvalidInput(
+            "family is required for glmm models (binomial, poisson, gaussian, or gamma)"
+                .to_string(),
+        )
+    })?;
+
+    match family.trim().to_ascii_lowercase().as_str() {
+        "binomial" => Ok(Family::Binomial),
+        "poisson" => Ok(Family::Poisson),
+        "gaussian" | "normal" => Ok(Family::Gaussian),
+        "gamma" => Ok(Family::Gamma),
+        other => Err(AgentApiError::InvalidInput(format!(
+            "unknown glmm family '{other}' (use binomial, poisson, gaussian, or gamma)"
+        ))),
+    }
+}
+
+fn parse_glmm_link(link: Option<&str>, family: Family) -> Result<Link, AgentApiError> {
+    let link = match link {
+        Some(raw) => Link::parse(raw).map_err(|_| {
+            AgentApiError::InvalidInput(format!(
+                "unknown glmm link '{}' (use logit, probit, cloglog, log, identity, inverse, or sqrt)",
+                raw.trim()
+            ))
+        })?,
+        None => Link::default_for(family),
+    };
+
+    if !link.valid_for(family) {
+        return Err(AgentApiError::InvalidInput(format!(
+            "link '{}' is not valid for family '{}'",
+            link.name(), family
+        )));
+    }
+    Ok(link)
+}
+
 fn fit_summary_from_cached(fit_id: &str, cached: &CachedFit) -> FitSummary {
     let fit = &cached.fit;
     FitSummary {
@@ -212,8 +349,9 @@ fn fit_summary_from_cached(fit_id: &str, cached: &CachedFit) -> FitSummary {
         formula: cached.formula.clone(),
         data_path: cached.data_path.display().to_string(),
         reml: cached.reml,
-        family: fit.family_name.clone(),
-        link: fit.link_name.clone(),
+        family: normalized_name(fit.family_name.as_deref()),
+        link: normalized_name(fit.link_name.as_deref()),
+        n_agq: cached.n_agq,
         num_obs: fit.num_obs,
         converged: fit.converged.unwrap_or(false),
         fixed_names: fit.fixed_names.clone().unwrap_or_default(),
@@ -224,6 +362,10 @@ fn fit_summary_from_cached(fit_id: &str, cached: &CachedFit) -> FitSummary {
         bic: fit.bic,
         log_likelihood: fit.log_likelihood,
     }
+}
+
+fn normalized_name(name: Option<&str>) -> Option<String> {
+    name.map(str::to_ascii_lowercase)
 }
 
 fn ensure_lmm_operation(cached: &CachedFit, operation: &str) -> Result<(), AgentApiError> {
