@@ -2,6 +2,35 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Semantic model family stored in the protocol-neutral session.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, rmcp::schemars::JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum ModelKind {
+    /// Ordinary linear model without random effects.
+    Lm,
+    /// Gaussian linear mixed-effects model.
+    Lmm,
+    /// Generalized linear mixed-effects model.
+    Glmm,
+    /// Nonlinear mixed-effects model.
+    Nlmm,
+}
+
+impl ModelKind {
+    /// Stable lowercase name used in diagnostics and protocol metadata.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Lm => "lm",
+            Self::Lmm => "lmm",
+            Self::Glmm => "glmm",
+            Self::Nlmm => "nlmm",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitLmmRequest {
@@ -53,9 +82,15 @@ pub struct BootstrapRequest {
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitSummary {
     pub fit_id: String,
+    pub model_kind: ModelKind,
     pub formula: String,
     pub data_path: String,
-    pub reml: bool,
+    /// REML setting for models where it applies; `None` for model families without REML.
+    pub reml: Option<bool>,
+    /// Distribution family for GLMMs, otherwise `None`.
+    pub family: Option<String>,
+    /// Link function for GLMMs, otherwise `None`.
+    pub link: Option<String>,
     pub num_obs: usize,
     pub converged: bool,
     pub fixed_names: Vec<String>,
@@ -71,9 +106,12 @@ pub struct FitSummary {
 #[schemars(crate = "rmcp::schemars")]
 pub struct FitListEntry {
     pub fit_id: String,
+    pub model_kind: ModelKind,
     pub formula: String,
     pub data_path: String,
-    pub reml: bool,
+    pub reml: Option<bool>,
+    pub family: Option<String>,
+    pub link: Option<String>,
     pub num_obs: usize,
 }
 
