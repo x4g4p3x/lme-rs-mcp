@@ -228,15 +228,15 @@ impl LmeAgentApi {
             load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         let fit = lmer(&request.formula, &df, reml)
             .map_err(|e| AgentApiError::Computation(e.to_string()))?;
-        self.cache_fit(
-            ModelKind::Lmm,
-            request.formula,
-            path,
-            Some(reml),
-            None,
-            None,
+        self.cache_fit(CachedFit {
+            model_kind: ModelKind::Lmm,
+            formula: request.formula,
+            data_path: path,
+            reml: Some(reml),
+            n_agq: None,
+            start: None,
             fit,
-        )
+        })
     }
 
     fn fit_model_glmm(&self, request: FitModelRequest) -> Result<FitSummary, AgentApiError> {
@@ -260,15 +260,15 @@ impl LmeAgentApi {
             load_csv(&request.data_path).map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         let fit = glmer_with_link(&request.formula, &df, family, link, n_agq)
             .map_err(|e| AgentApiError::Computation(e.to_string()))?;
-        self.cache_fit(
-            ModelKind::Glmm,
-            request.formula,
-            path,
-            None,
-            Some(n_agq),
-            None,
+        self.cache_fit(CachedFit {
+            model_kind: ModelKind::Glmm,
+            formula: request.formula,
+            data_path: path,
+            reml: None,
+            n_agq: Some(n_agq),
+            start: None,
             fit,
-        )
+        })
     }
 
     fn fit_model_nlmm(&self, request: FitModelRequest) -> Result<FitSummary, AgentApiError> {
@@ -299,37 +299,19 @@ impl LmeAgentApi {
         };
         let fit = nlmer_with_options(&request.formula, &df, &options)
             .map_err(|e| AgentApiError::Computation(e.to_string()))?;
-        self.cache_fit(
-            ModelKind::Nlmm,
-            request.formula,
-            path,
-            Some(reml),
-            Some(n_agq),
-            start_metadata,
+        self.cache_fit(CachedFit {
+            model_kind: ModelKind::Nlmm,
+            formula: request.formula,
+            data_path: path,
+            reml: Some(reml),
+            n_agq: Some(n_agq),
+            start: start_metadata,
             fit,
-        )
+        })
     }
 
-    fn cache_fit(
-        &self,
-        model_kind: ModelKind,
-        formula: String,
-        data_path: std::path::PathBuf,
-        reml: Option<bool>,
-        n_agq: Option<usize>,
-        start: Option<std::collections::BTreeMap<String, f64>>,
-        fit: lme_rs::LmeFit,
-    ) -> Result<FitSummary, AgentApiError> {
+    fn cache_fit(&self, cached: CachedFit) -> Result<FitSummary, AgentApiError> {
         let fit_id = Uuid::new_v4().to_string();
-        let cached = CachedFit {
-            model_kind,
-            formula,
-            data_path,
-            reml,
-            n_agq,
-            start,
-            fit,
-        };
         let summary = fit_summary_from_cached(&fit_id, &cached);
         self.session.insert(fit_id, cached);
         Ok(summary)
