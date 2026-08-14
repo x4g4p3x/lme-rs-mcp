@@ -1,0 +1,24 @@
+name: Resolve lme-rs lockfile
+
+on:
+  push:
+    branches:
+      - agent/lme-rs-0.2.1-model-kind
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve lme-rs 0.2.1
+        run: cargo update -p lme-rs --precise 0.2.1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolved-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
