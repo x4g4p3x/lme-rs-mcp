@@ -6,9 +6,9 @@ use crate::api::{AgentApiError, LmeAgentApi};
 use crate::dto::{
     AnovaRequest, AnovaSummary, BootSummary, BootstrapRequest, CompareModelsRequest,
     CompareModelsSummary, ConfidenceIntervalsRequest, ConfidenceIntervalsSummary,
-    CrossValidateRequest, CrossValidationSummary, DiagnosticsSummary, FitIdRequest,
-    FitListSummary, FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
-    ModelBootstrapRequest, PredictRequest, PredictionSummary,
+    CrossValidateRequest, CrossValidationSummary, DiagnosticsSummary, FitIdRequest, FitListSummary,
+    FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult, ModelBootstrapRequest,
+    PredictRequest, PredictionSummary,
 };
 
 #[derive(Clone)]
@@ -142,9 +142,7 @@ impl LmeMcpServer {
         self.api.predict(request).map(Json).map_err(to_mcp_error)
     }
 
-    #[tool(
-        description = "Group-preserving cross-validation for cached LMM or GLMM models."
-    )]
+    #[tool(description = "Group-preserving cross-validation for cached LMM or GLMM models.")]
     fn cross_validate(
         &self,
         Parameters(request): Parameters<CrossValidateRequest>,
@@ -199,15 +197,10 @@ impl LmeMcpServer {
         &self,
         Parameters(FitIdRequest { fit_id }): Parameters<FitIdRequest>,
     ) -> Result<Json<ForgetFitResult>, McpError> {
-        self.api
-            .forget_fit(&fit_id)
-            .map(Json)
-            .map_err(to_mcp_error)
+        self.api.forget_fit(&fit_id).map(Json).map_err(to_mcp_error)
     }
 
-    #[tool(
-        description = "Compatibility Type I/II/III fixed-effects ANOVA for a cached LMM."
-    )]
+    #[tool(description = "Compatibility Type I/II/III fixed-effects ANOVA for a cached LMM.")]
     fn lme_anova(
         &self,
         Parameters(request): Parameters<AnovaRequest>,

@@ -10,8 +10,8 @@ use std::sync::Arc;
 use lme_rs::family::{Family, Link};
 use lme_rs::{
     boot_lmer, cv_grouped, cv_grouped_glmer, glmer_with_link, lm, lmer, nlmer_with_options,
-    AnovaType, BootLmerMethod, BootLmerResult, CvGroupedResult, DdfMethod,
-    FixedEffectsAnovaResult, NlmerOptions, NlmmStart,
+    AnovaType, BootLmerMethod, BootLmerResult, CvGroupedResult, DdfMethod, FixedEffectsAnovaResult,
+    NlmerOptions, NlmmStart,
 };
 use uuid::Uuid;
 
@@ -505,7 +505,11 @@ impl LmeAgentApi {
         } else {
             let n = fit.residuals.len() as f64;
             let sum = fit.residuals.iter().sum::<f64>();
-            let sum_sq = fit.residuals.iter().map(|value| *value * *value).sum::<f64>();
+            let sum_sq = fit
+                .residuals
+                .iter()
+                .map(|value| *value * *value)
+                .sum::<f64>();
             let max_abs = fit
                 .residuals
                 .iter()
@@ -573,8 +577,8 @@ impl LmeAgentApi {
             ));
         }
 
-        let mut fit = lm(&matrices.y, &matrices.x)
-            .map_err(|e| AgentApiError::Computation(e.to_string()))?;
+        let mut fit =
+            lm(&matrices.y, &matrices.x).map_err(|e| AgentApiError::Computation(e.to_string()))?;
         fit.formula = Some(request.formula.clone());
         fit.fixed_names = Some(matrices.fixed_names.clone());
         fit.fixed_term_assign = Some(matrices.fixed_term_assign.clone());
@@ -911,12 +915,15 @@ fn resolve_parameter_indices(
         Some(parameters) if !parameters.is_empty() => parameters
             .iter()
             .map(|name| {
-                names.iter().position(|candidate| candidate == name).ok_or_else(|| {
-                    AgentApiError::InvalidInput(format!(
-                        "unknown fixed-effect parameter '{name}'; available: {}",
-                        names.join(", ")
-                    ))
-                })
+                names
+                    .iter()
+                    .position(|candidate| candidate == name)
+                    .ok_or_else(|| {
+                        AgentApiError::InvalidInput(format!(
+                            "unknown fixed-effect parameter '{name}'; available: {}",
+                            names.join(", ")
+                        ))
+                    })
             })
             .collect(),
         _ => Ok((0..cached.fit.coefficients.len()).collect()),

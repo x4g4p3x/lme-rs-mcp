@@ -117,7 +117,10 @@ fn semantic_lm_fit_predict_diagnostics_and_lifecycle_aliases() {
         })
         .expect("LM population predictions");
     assert_eq!(predictions.predictions.len(), 180);
-    assert!(predictions.predictions.iter().all(|value| value.is_finite()));
+    assert!(predictions
+        .predictions
+        .iter()
+        .all(|value| value.is_finite()));
 
     let diagnostics = api.diagnostics(&fit.fit_id).expect("LM diagnostics");
     assert!(diagnostics.converged);
@@ -264,7 +267,10 @@ fn protocol_neutral_fit_model_nlmm_lifecycle() {
         })
         .expect("NLMM population prediction");
     assert_eq!(predictions.predictions.len(), 40);
-    assert!(predictions.predictions.iter().all(|value| value.is_finite()));
+    assert!(predictions
+        .predictions
+        .iter()
+        .all(|value| value.is_finite()));
 
     let listed = api.list_fits();
     assert_eq!(listed.fits.len(), 1);
