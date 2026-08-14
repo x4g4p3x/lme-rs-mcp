@@ -164,7 +164,7 @@ Fits are **stateful inside one server process**:
 
 There is no TTL yet. Long sessions with many large fits will grow memory use.
 
-The current session stores `LmeFit` only. Generalizing that store is the prerequisite for exposing GLMM/NLMM through the same semantic model API; see [AGENT_API.md](AGENT_API.md).
+The session stores the unified `lme-rs 0.2.1` `LmeFit` together with protocol-neutral `ModelKind` metadata. Because upstream uses the same fit representation for LMM/GLMM/NLMM, future model families can reuse this cache without introducing another concrete-fit enum; see [AGENT_API.md](AGENT_API.md).
 
 ## Data paths and security
 
@@ -204,13 +204,13 @@ Fit a Gaussian linear mixed model (`lmer`).
 | `data_path` | string | *required* | Path to CSV on the server host |
 | `reml` | boolean | `true` | `true` = REML, `false` = ML |
 
-**Returns:** `FitSummary` including `fit_id`, coefficients, SEs, σ², AIC/BIC, and convergence flag.
+**Returns:** `FitSummary` including `fit_id`, `model_kind`, optional `reml` / GLMM `family` / `link` metadata, coefficients, SEs, σ², AIC/BIC, and convergence flag.
 
 ### `lme_list_fits`
 
 **Parameters:** none.
 
-**Returns:** `FitListSummary` with `fits[]` entries containing `fit_id`, `formula`, `data_path`, `reml`, `num_obs`.
+**Returns:** `FitListSummary` with `fits[]` entries containing `fit_id`, `model_kind`, `formula`, `data_path`, optional `reml` / `family` / `link`, and `num_obs`.
 
 ### `lme_fit_summary`
 
@@ -289,7 +289,11 @@ Example response (abbreviated):
 ```json
 {
   "fit_id": "a1b2c3d4-....",
+  "model_kind": "lmm",
   "formula": "Reaction ~ Days + (1 | Subject)",
+  "reml": true,
+  "family": null,
+  "link": null,
   "converged": true,
   "fixed_names": ["(Intercept)", "Days"],
   "coefficients": [251.4, 10.46],
@@ -351,9 +355,9 @@ Tool: `lme_forget_fit`
 | Parquet / Arrow | CSV only |
 | Nested LRT (`anova` two models) | Not exposed |
 | Session persistence / disk cache | Not implemented |
-| crates.io `lme-rs` dep | `0.1.11` (bootstrap); optional `[patch]` for unreleased co-dev |
+| crates.io `lme-rs` dep | `0.2.1`; optional `[patch]` for unreleased co-dev |
 
-The protocol-neutral core is now the extension point for these capabilities. The planned semantic tool surface and the upgrade sequence to current `lme-rs 0.2.x` are in [AGENT_API.md](AGENT_API.md).
+The protocol-neutral core is the extension point for these capabilities. The dependency/session upgrade to `lme-rs 0.2.1` is complete; the next semantic step is `fit_model` with GLMM support. See [AGENT_API.md](AGENT_API.md).
 
 Statistical scope matches [lme-rs USABILITY.md](https://github.com/x4g4p3x/lme-rs/blob/master/USABILITY.md) green rows for LMM + ANOVA + bootstrap.
 
