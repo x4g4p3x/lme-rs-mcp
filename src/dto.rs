@@ -1,9 +1,9 @@
 //! Protocol-neutral request and response types for agent-facing operations.
 
-use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct FitLmmRequest {
     /// Wilkinson formula, e.g. `Reaction ~ Days + (1 | Subject)`.
     pub formula: String,
@@ -14,13 +14,15 @@ pub struct FitLmmRequest {
     pub reml: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct FitIdRequest {
     /// Identifier returned by `lme_fit`.
     pub fit_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct AnovaRequest {
     pub fit_id: String,
     #[serde(default = "default_ddf")]
@@ -29,7 +31,8 @@ pub struct AnovaRequest {
     pub anova_type: String,
 }
 
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct BootstrapRequest {
     pub fit_id: String,
     #[serde(default = "default_nsim")]
@@ -46,7 +49,8 @@ pub struct BootstrapRequest {
     pub level: f64,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct FitSummary {
     pub fit_id: String,
     pub formula: String,
@@ -63,7 +67,8 @@ pub struct FitSummary {
     pub log_likelihood: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct FitListEntry {
     pub fit_id: String,
     pub formula: String,
@@ -72,17 +77,20 @@ pub struct FitListEntry {
     pub num_obs: usize,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct FitListSummary {
     pub fits: Vec<FitListEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct ForgetFitResult {
     pub forgotten: String,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct AnovaRow {
     pub term: String,
     pub num_df: f64,
@@ -91,7 +99,8 @@ pub struct AnovaRow {
     pub p_value: f64,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct AnovaSummary {
     pub fit_id: String,
     pub anova_type: String,
@@ -99,7 +108,8 @@ pub struct AnovaSummary {
     pub rows: Vec<AnovaRow>,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct BootConfintRow {
     pub name: String,
     pub estimate: f64,
@@ -107,7 +117,8 @@ pub struct BootConfintRow {
     pub upper: f64,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, rmcp::schemars::JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct BootSummary {
     pub fit_id: String,
     pub method: String,
