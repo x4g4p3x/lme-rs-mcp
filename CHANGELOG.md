@@ -11,8 +11,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`LmeAgentApi`** — protocol-neutral statistical/session API reusable by MCP and future scientific protocol adapters.
 - Typed request DTOs for fit, ANOVA, bootstrap, and fit-id operations.
 - Typed response DTOs with JSON schemas, including fit lists and forget-fit results.
+- **`ModelKind` session metadata** (`lm`, `lmm`, `glmm`, `nlmm`) plus optional REML/family/link fields in fit summaries and listings, preparing the cache for the wider `lme-rs 0.2.x` model surface.
+- Explicit model-family guards for current LMM-only ANOVA and bootstrap adapter operations.
 - **AGENT_API.md** — target semantic tool surface and migration path to the current `lme-rs 0.2.x` feature set.
-- Integration coverage for the protocol-neutral fit lifecycle and MCP structured output conversion.
+- Integration coverage for the protocol-neutral fit lifecycle, stable model-kind names, and MCP structured output conversion.
 - **GUIDE.md** — installation, architecture, session model, full tool reference, sleepstudy workflow, troubleshooting.
 - **CONTRIBUTING.md** — development layout and tool-addition checklist.
 - **AGENTS.md** — contributor hooks and preflight.
@@ -27,8 +29,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - MCP handlers are now a thin transport layer over `LmeAgentApi`; statistical logic no longer lives in the MCP router.
 - MCP tool results now return typed `rmcp::Json<T>` values, providing `structuredContent` and generated `outputSchema` instead of manually serialized JSON strings.
 - Existing MCP tool names remain unchanged for compatibility while the semantic API is developed.
-- **`lme-rs` dependency** — crates.io pin `0.1.11` (bootstrap); simplified single-repo CI.
-- **RELEASING.md** — publish `lme-rs` 0.1.11 before refreshing `Cargo.lock` and tagging MCP.
+- **`lme-rs` dependency** — upgraded from crates.io `0.1.11` to **`0.2.1`** and regenerated `Cargo.lock` with Cargo.
+- Fit-session records remain backed by the unified upstream `LmeFit` type, but now carry protocol-neutral model semantics so GLMM/NLMM support does not require a parallel concrete-fit enum.
+- **RELEASING.md** — publish the matching `lme-rs` release before refreshing `Cargo.lock` and tagging MCP.
 - **Committed `Cargo.lock`** for reproducible binary builds.
 
 ## [0.1.0] - 2026-07-14
