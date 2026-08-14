@@ -16,6 +16,7 @@ pub use data::load_csv;
 pub use dto::{
     AnovaRequest, AnovaRow, AnovaSummary, BootConfintRow, BootSummary, BootstrapRequest,
     FitIdRequest, FitListEntry, FitListSummary, FitLmmRequest, FitSummary, ForgetFitResult,
+    ModelKind,
 };
 pub use mcp::LmeMcpServer;
 pub use session::{CachedFit, FitSession};
