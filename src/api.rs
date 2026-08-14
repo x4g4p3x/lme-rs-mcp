@@ -40,6 +40,17 @@ impl LmeAgentApi {
     }
 
     pub fn fit_lmm(&self, request: FitLmmRequest) -> Result<FitSummary, AgentApiError> {
+        if request.formula.trim().is_empty() {
+            return Err(AgentApiError::InvalidInput(
+                "formula must not be empty".to_string(),
+            ));
+        }
+        if request.data_path.trim().is_empty() {
+            return Err(AgentApiError::InvalidInput(
+                "data_path must not be empty".to_string(),
+            ));
+        }
+
         let (path, df) = load_csv(&request.data_path)
             .map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         let fit = lmer(&request.formula, &df, request.reml)
@@ -97,15 +108,18 @@ impl LmeAgentApi {
         let (_, df) = load_csv(cached.data_path.to_string_lossy().as_ref())
             .map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
         match ddf {
-            DdfMethod::Satterthwaite => cached
-                .fit
-                .with_satterthwaite(&df)
-                .map_err(|e| AgentApiError::Computation(e.to_string()))?,
-            DdfMethod::KenwardRoger => cached
-                .fit
-                .with_kenward_roger(&df)
-                .map_err(|e| AgentApiError::Computation(e.to_string()))?,
-            _ => {}
+            DdfMethod::Satterthwaite => {
+                cached
+                    .fit
+                    .with_satterthwaite(&df)
+                    .map_err(|e| AgentApiError::Computation(e.to_string()))?;
+            }
+            DdfMethod::KenwardRoger => {
+                cached
+                    .fit
+                    .with_kenward_roger(&df)
+                    .map_err(|e| AgentApiError::Computation(e.to_string()))?;
+            }
         }
 
         let table = cached
@@ -116,6 +130,22 @@ impl LmeAgentApi {
     }
 
     pub fn bootstrap(&self, request: BootstrapRequest) -> Result<BootSummary, AgentApiError> {
+        if request.nsim == 0 {
+            return Err(AgentApiError::InvalidInput(
+                "nsim must be greater than zero".to_string(),
+            ));
+        }
+        if !request.level.is_finite() || request.level <= 0.0 || request.level >= 1.0 {
+            return Err(AgentApiError::InvalidInput(
+                "level must be finite and strictly between 0 and 1".to_string(),
+            ));
+        }
+        if request.n_jobs == Some(0) {
+            return Err(AgentApiError::InvalidInput(
+                "n_jobs must be greater than zero when provided".to_string(),
+            ));
+        }
+
         let cached = self.cached_fit(&request.fit_id)?;
         let (_, df) = load_csv(cached.data_path.to_string_lossy().as_ref())
             .map_err(|e| AgentApiError::InvalidInput(e.to_string()))?;
@@ -156,9 +186,9 @@ impl LmeAgentApi {
     }
 
     fn cached_fit(&self, fit_id: &str) -> Result<CachedFit, AgentApiError> {
-        self.session.get(fit_id).ok_or_else(|| {
-            AgentApiError::NotFound(format!("unknown fit_id '{fit_id}'"))
-        })
+        self.session
+            .get(fit_id)
+            .ok_or_else(|| AgentApiError::NotFound(format!("unknown fit_id '{fit_id}'")))
     }
 }
 
