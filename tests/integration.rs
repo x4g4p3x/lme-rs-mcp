@@ -1,7 +1,5 @@
 use lme_rs::{boot_lmer, lmer, BootLmerMethod};
-use lme_rs_mcp::{
-    load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer,
-};
+use lme_rs_mcp::{load_csv, FitListSummary, FitLmmRequest, LmeAgentApi, LmeMcpServer};
 use polars::prelude::*;
 use rmcp::{handler::server::tool::IntoCallToolResult, Json};
 use std::fs::File;
