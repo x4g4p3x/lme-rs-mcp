@@ -11,18 +11,24 @@ MCP client
 LmeMcpServer
     |
     v
-LmeAgentApi
+lme-rs-agent: LmeAgentApi + FitSession
     |
     v
-lme-rs 0.2.1 + Polars
+lme-rs 0.2.6 + Polars
     |
     v
 FitSession: fit_id -> CachedFit -> LmeFit
 ```
 
-The MCP layer owns transport. `LmeAgentApi` owns statistical/session semantics. Responses are typed `rmcp::Json<T>` values with generated MCP schemas and structured content.
+The MCP layer owns transport. The separate `lme-rs-agent` crate owns statistical/session semantics and is shared with `lme-rs-scp`. Responses are typed `rmcp::Json<T>` values with generated MCP schemas and structured content.
 
 ## Install
+
+```powershell
+cargo install lme-rs-mcp --version 0.2.0 --locked
+```
+
+Or build from source using registry dependencies:
 
 ```powershell
 git clone https://github.com/x4g4p3x/lme-rs-mcp.git
@@ -232,7 +238,7 @@ The released `lm()` fit does not provide deviance, so LM LRT comparison is not e
 }
 ```
 
-`parameters` is optional. `wald` uses the engine's fitted standard errors. `profile` refits profile likelihood and is supported for LMM/GLMM. The bare `lm()` implementation in `lme-rs 0.2.1` does not provide coefficient standard errors, so LM Wald CIs are unavailable until the engine supplies them.
+`parameters` is optional. `wald` uses the engine's fitted standard errors. `profile` refits profile likelihood and is supported for LMM/GLMM. LM now uses the formula-based engine API and supports Wald intervals with residual Student t inference.
 
 ### `predict`
 
@@ -301,9 +307,73 @@ New integrations should prefer semantic names.
 
 ## Estimated marginal means
 
-A `marginal_means` semantic operation is intentionally not present yet. The implementation exists on upstream `lme-rs` master but was added after the published `v0.2.1` tag. This server stays on the crates.io release and does not duplicate statistical algorithms in the MCP adapter. Add the tool after that upstream feature is published in a subsequent `lme-rs` release.
+`marginal_means` and `pairwise_comparisons` now expose the shared reference-grid contract described below.
 
 ## Current limitations
+
+### Marginal means and pairwise comparisons
+
+Both tools accept the same grid fields:
+
+```json
+{
+  "fit_id": "<fit_id>",
+  "terms": ["treatment"],
+  "by": ["sex"],
+  "at": { "age": 40.0 },
+  "weights": "equal",
+  "ddf_method": "auto",
+  "level": 0.95
+}
+```
+
+`terms` and `by` must be distinct fitted categorical factors. Multiple `terms` define
+an interaction grid. Numeric references omitted from `at` use their sample means.
+Weights are `equal` or `proportional`; proportional uses pooled nuisance-factor
+frequencies. Offsets and GLMM/NLMM marginal inference are unsupported. Estimates and
+comparisons use the link/linear predictor scale; they are not averaged response-scale
+GLMM predictions. Results include named cells, estimates, standard errors, df, and
+pointwise confidence limits. Asymptotic df and unavailable pairwise statistics/p-values
+are JSON null rather than infinity or NaN.
+
+`ddf_method` accepts `auto`, `asymptotic`, `residual` (LM), `satterthwaite` (LMM), or
+`kenward_roger` (LMM). Auto selects residual for LM and Satterthwaite for LMM.
+Explicit asymptotic inference is available for either supported model. Inference requires convergence. Pairwise comparisons additionally
+accept `adjust = "holm" | "bonferroni" | "tukey" | "none"`; default Holm. Adjustment
+families remain separate within each `by` stratum. Pairwise output contains raw and
+adjusted p-values, not simultaneous confidence intervals; `level` affects mean CIs only.
+
+### Background execution and Tasks
+
+All numerical handlers use background workers, with at most two active operations.
+Excess work returns a retryable busy error rather than entering an unbounded queue.
+Bootstrap/CV default to one engine worker; explicit `n_jobs` is limited to 1–4.
+Other limits are `nsim` 1–10000, CV folds 2–100, AGQ points 1–25, and 128
+target/conditioning cells (the engine also limits the full reference grid to 4096 rows).
+
+On MCP 2026-07-28, clients declaring `io.modelcontextprotocol/tasks` in **each request's**
+capabilities receive task handles for fitting, ANOVA, bootstrap, confidence intervals,
+CV, and marginal inference. Poll `tasks/get` using the returned `taskId` and polling
+interval. A completed task includes the original structured tool result. `tasks/cancel`
+acknowledges cancellation; `tasks/update` accepts any input responses (these tools do
+not request interactive input). Other clients receive ordinary tool results, including
+legacy clients using `initialize`. The older 2025-11-25 experimental Tasks wire format
+is not supported. Modern task clients must use a task-aware call/poll flow; an SDK helper
+expecting only `CallToolResult` cannot consume a task handle.
+
+Task metadata reports starting/running state; the engine does not expose percentage
+progress. Tasks have a 15-minute TTL and up to 15 further minutes of terminal-result
+retention. Expiry is checked on task access/creation. At most 64 task records are
+reserved across this retention window. Tasks and fits are process-local; restart clears
+both. There is no cross-restart persistence or task enumeration.
+
+Cancellation or expiry discards the result and removes an undelivered newly fitted
+model. It cannot preempt an engine computation already running: that worker drains
+and keeps its capacity reservation until completion. Existing models used for inference
+remain available. Server shutdown clears tasks; running numerical work may finish
+before the process exits. CSV inputs should remain unchanged while cached models are used.
+
+The protocol contract is [SEP-2663](https://tasks.extensions.modelcontextprotocol.io/seps/2663-tasks-extension).
 
 | Topic | Status |
 |:--|:--|
@@ -314,11 +384,11 @@ A `marginal_means` semantic operation is intentionally not present yet. The impl
 | Model-aware bootstrap | Exposed for LMM/GLMM |
 | Grouped CV | Exposed for LMM/GLMM |
 | Diagnostics | Exposed |
-| Estimated marginal means | Waiting for upstream release |
+| Estimated marginal means | Exposed for LM/LMM |
 | NLMM custom Rust means/bounds/optimizer internals | Library-level only |
 | Parquet / Arrow input | Not exposed; CSV only |
 | Session persistence | Not implemented |
-| MCP Tasks for expensive operations | Future transport enhancement |
+| MCP Tasks for expensive operations | Negotiated SEP-2663 extension; ordinary calls remain supported |
 
 ## Troubleshooting
 

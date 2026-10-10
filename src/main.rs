@@ -6,7 +6,9 @@ use rmcp::{transport, ServiceExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let service = LmeMcpServer::new().serve(transport::stdio()).await?;
+    let server = LmeMcpServer::new();
+    let service = server.clone().serve(transport::stdio()).await?;
     service.waiting().await?;
+    server.shutdown();
     Ok(())
 }

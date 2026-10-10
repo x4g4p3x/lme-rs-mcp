@@ -1,9 +1,10 @@
-# Local co-development with a sibling lme-rs checkout (optional).
+# Local co-development with sibling lme-rs and lme-rs-agent checkouts (optional).
 #
 #   task patch:local
 #
-# Use when testing MCP against unreleased lme-rs APIs. Not needed for normal
-# `cargo install` once the pinned crates.io version is published.
+# Use when testing MCP against unreleased shared-core or engine APIs. Not needed
+# for normal source builds or `cargo install`.
 
 [patch.crates-io]
 lme-rs = { path = "../lme-rs" }
+lme-rs-agent = { path = "../lme-rs-agent" }

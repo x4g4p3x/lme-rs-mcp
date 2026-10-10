@@ -1,26 +1,10 @@
-//! Agent-facing adapter layer for [`lme-rs`](https://github.com/x4g4p3x/lme-rs).
+//! MCP transport adapter for the protocol-neutral [`lme_rs_agent`] crate.
 //!
-//! Statistical and session semantics live in [`LmeAgentApi`]. [`LmeMcpServer`] is a thin
-//! MCP transport adapter that exposes the same typed request/response model as structured
-//! MCP tool content. Keeping the core protocol-neutral makes it reusable by future
-//! scientific protocol adapters without duplicating model logic.
+//! Statistical and session semantics live in [`lme_rs_agent::LmeAgentApi`].
+//! [`LmeMcpServer`] only maps that API onto MCP tools and structured content.
 
-mod api;
-mod data;
-mod dto;
 mod mcp;
-mod session;
+mod tasks;
 
-pub use api::{AgentApiError, LmeAgentApi};
-pub use data::load_csv;
-pub use dto::{
-    AnovaRequest, AnovaRow, AnovaSummary, BootConfintRow, BootSummary, BootstrapRequest,
-    CompareModelsRequest, CompareModelsSummary, ConfidenceIntervalMethod, ConfidenceIntervalRow,
-    ConfidenceIntervalsRequest, ConfidenceIntervalsSummary, CrossValidateRequest,
-    CrossValidationFold, CrossValidationSummary, DiagnosticsSummary, FitIdRequest, FitListEntry,
-    FitListSummary, FitLmmRequest, FitModelRequest, FitSummary, ForgetFitResult,
-    ModelBootstrapRequest, ModelKind, PredictRequest, PredictionMode, PredictionScale,
-    PredictionSummary,
-};
+pub use lme_rs_agent::*;
 pub use mcp::LmeMcpServer;
-pub use session::{CachedFit, FitSession};

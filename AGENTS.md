@@ -34,10 +34,11 @@ Bypass: `git push --no-verify`.
 task ci               # lint + check + test
 ```
 
-## Dependency on lme-rs
+## Dependencies
 
-- **Published:** `lme-rs = "0.1.11"` from crates.io.
-- **Co-dev patch:** `task patch:local` when testing unreleased APIs on a sibling checkout.
+- **Shared core:** `lme-rs-agent = "=0.1.0"` from crates.io.
+- **Statistical engine:** `lme-rs = "0.2.6"` through `lme-rs-agent` (and directly in tests).
+- **Co-dev patch:** `task patch:local` when testing unreleased agent/engine APIs on sibling checkouts.
 
 Release order: [RELEASING.md](RELEASING.md).
 

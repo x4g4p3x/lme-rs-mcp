@@ -6,7 +6,7 @@ use lme_rs_mcp::{
     PredictionMode, PredictionScale,
 };
 use polars::prelude::*;
-use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResult, ErrorData, Json};
+use rmcp::{handler::server::tool::IntoCallToolResult, model::CallToolResponse, ErrorData, Json};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::PathBuf;
@@ -454,9 +454,11 @@ fn model_kind_and_prediction_enums_have_stable_protocol_names() {
 
 #[test]
 fn typed_responses_become_structured_mcp_content() {
-    let result: Result<CallToolResult, ErrorData> =
+    let result: Result<CallToolResponse, ErrorData> =
         IntoCallToolResult::into_call_tool_result(Json(FitListSummary { fits: vec![] }));
-    let result = result.expect("structured MCP result");
+    let CallToolResponse::Complete(result) = result.expect("structured MCP result") else {
+        panic!("typed response must be complete");
+    };
 
     assert!(result.structured_content.is_some());
     assert!(!result.content.is_empty());

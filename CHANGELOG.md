@@ -6,7 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-10
+
 ### Added
+
+- Shared-core marginal means and pairwise comparisons: categorical interaction grids,
+  explicit references, conditioning, nuisance weights, model-aware df, and adjustments.
+- MCP Tasks extension (SEP-2663) for eligible expensive operations, preserving ordinary
+  calls and legacy initialization for clients that do not declare modern task support.
+- Two bounded statistical workers, bounded task retention, TTL, and cancellation with
+  cleanup of newly fitted models whose results were not delivered.
+- Actual stdio client workflows, task/cancellation/capacity regressions, and shared-core
+  independent R emmeans/lmerTest reference tests on synthetic unbalanced observations.
 
 - **`LmeAgentApi`** — protocol-neutral statistical/session API reusable by MCP and future scientific protocol adapters.
 - **Complete semantic `fit_model` surface** for LM, LMM, GLMM, and built-in formula-based NLMM models.
@@ -29,13 +40,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Upgrade to lme-rs 0.2.6 and rmcp 3.5.1; LM fitting uses `lm_df` to retain standard
+  errors, factor metadata, and offsets.
+- Bound bootstrap/CV workers and request sizes, defaulting engine workers to one.
+- Update the locked TLS dependency to remediate RUSTSEC-2026-0285.
+- Protocol-neutral API, DTOs, validation, CSV loading, and fit-session logic moved to the separate `lme-rs-agent` crate; MCP now depends on and re-exports that shared core.
+- `schemars` DTO derives no longer depend on the `rmcp` re-export, keeping the shared crate transport-neutral.
 - MCP handlers are a thin transport layer over `LmeAgentApi`; statistical/session semantics live in the protocol-neutral core.
 - MCP tool results return typed `rmcp::Json<T>`, providing `structuredContent` and generated `outputSchema`.
 - Existing `lme_*` MCP names remain available for compatibility while semantic names provide the preferred new surface.
 - `lme_fit` delegates to the same semantic LMM implementation used by `fit_model`.
 - Fit-session records remain backed by the unified upstream `LmeFit` while carrying protocol-neutral model semantics.
-- The adapter targets the published crates.io **`lme-rs 0.2.1`** release rather than unreleased upstream revisions.
-- Estimated marginal means are intentionally deferred until the post-`v0.2.1` upstream implementation is included in a published `lme-rs` release; statistical code is not duplicated in the MCP adapter.
+- The adapter targets the published crates.io **`lme-rs 0.2.6`** release.
 - **Committed `Cargo.lock`** remains the reproducible binary dependency resolution.
 
 ## [0.1.0] - 2026-07-14

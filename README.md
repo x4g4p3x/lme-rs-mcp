@@ -15,17 +15,17 @@ MCP client
 LmeMcpServer        transport only
     |
     v
-LmeAgentApi         statistical/session semantics
+lme-rs-agent        LmeAgentApi, DTOs, validation, FitSession
     |
     v
-lme-rs 0.2.1 + Polars
+lme-rs 0.2.6 + Polars
 ```
 
-`LmeAgentApi` is protocol-neutral so a future Science Context Protocol (SCP) adapter can reuse the same typed operations without importing MCP code.
+The protocol-neutral core now lives in the separate [`lme-rs-agent`](https://github.com/x4g4p3x/lme-rs-agent) crate. Both this MCP adapter and [`lme-rs-scp`](https://github.com/x4g4p3x/lme-rs-scp) reuse it without depending on each other.
 
 ## Semantic API
 
-The current adapter targets the published **`lme-rs 0.2.1`** release.
+The current adapter targets the published **`lme-rs 0.2.6`** release.
 
 | Capability | Semantic MCP tool | Scope |
 |:--|:--|:--|
@@ -40,6 +40,8 @@ The current adapter targets the published **`lme-rs 0.2.1`** release.
 | Prediction | `predict` | population/conditional, link/response |
 | Grouped cross-validation | `cross_validate` | LMM/GLMM |
 | Diagnostics | `diagnostics` | all model kinds |
+| Marginal means | `marginal_means` | LM/LMM |
+| Pairwise comparisons | `pairwise_comparisons` | LM/LMM |
 
 The original compatibility tools remain available unchanged: `lme_fit`, `lme_list_fits`, `lme_fit_summary`, `lme_forget_fit`, `lme_anova`, and `lme_boot`.
 
@@ -99,17 +101,23 @@ All fitting operations return a `fit_id`, which is used by subsequent semantic o
 
 `compare_models` uses the `lme-rs` likelihood-ratio test. Models must use the same model kind and dataset; GLMMs must also share family/link. When REML applies, compare ML fits (`reml = false`).
 
-`confidence_intervals` supports `method = "wald" | "profile"` and optional coefficient-name selection. Profile intervals are supported for LMM/GLMM by `lme-rs 0.2.1`.
+`confidence_intervals` supports `method = "wald" | "profile"` and optional coefficient-name selection. Profile intervals are supported for LMM/GLMM by `lme-rs 0.2.6`.
 
 ### Cross-validation
 
 `cross_validate` performs group-preserving k-fold CV for LMM/GLMM. Supply a grouping column, fold count, and optional `seed`/`n_jobs`. The response includes OOF predictions, fold assignments, RMSE/MAE, per-fold metrics, and binomial log loss where applicable.
 
-## Release boundary: marginal means
+## Marginal means
 
-Current upstream `lme-rs` master contains estimated marginal means, but that module was added **after the `v0.2.1` release tag**. This adapter intentionally does not copy statistical code into MCP and does not depend on unreleased git revisions. A semantic `marginal_means` operation should be added after the corresponding `lme-rs` functionality is published in a new release.
+`marginal_means` and `pairwise_comparisons` support categorical interaction grids, conditioning factors, numeric reference values, equal/proportional nuisance weighting, and Holm/Bonferroni/Tukey adjustments. LM uses residual degrees of freedom, LMM defaults to Satterthwaite (Kenward-Roger is optional), and asymptotic inference can be requested explicitly. GLMM/NLMM marginal grids are unsupported by the pinned engine. The shared core owns these contracts.
 
 ## Install
+
+```powershell
+cargo install lme-rs-mcp --version 0.2.0 --locked
+```
+
+Or build from source:
 
 ```powershell
 git clone https://github.com/x4g4p3x/lme-rs-mcp.git
@@ -117,13 +125,9 @@ cd lme-rs-mcp
 cargo build --release --locked
 ```
 
+Source builds and published installs resolve `lme-rs-agent 0.1.0` and `lme-rs 0.2.6` from crates.io. Sibling checkouts are optional for co-development.
+
 Binary: `target\release\lme-rs-mcp.exe` on Windows or `target/release/lme-rs-mcp` on Unix.
-
-When published:
-
-```powershell
-cargo install lme-rs-mcp --locked
-```
 
 ## Configure Cursor
 
@@ -161,7 +165,7 @@ cargo install lme-rs-mcp --locked
 
 ## Status
 
-Current development completes the semantic surface supported by published `lme-rs 0.2.1`: LM/LMM/GLMM/NLMM fitting, lifecycle management, prediction, model comparison, confidence intervals, model-aware bootstrap, grouped CV, and diagnostics. The original `lme_*` tools remain for compatibility. Estimated marginal means are intentionally deferred until their upstream implementation is released.
+Version 0.2.0 targets published `lme-rs 0.2.6`: LM/LMM/GLMM/NLMM fitting, lifecycle management, prediction, model comparison, confidence intervals, model-aware bootstrap, grouped CV, and diagnostics. The original `lme_*` tools remain for compatibility. LM/LMM marginal means and adjusted pairwise comparisons are exposed through the shared core. Expensive tools support the negotiated MCP Tasks extension.
 
 Validate publication-critical statistical results against R `lme4` / `lmerTest` as appropriate.
 
