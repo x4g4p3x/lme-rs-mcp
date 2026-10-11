@@ -3,8 +3,8 @@
 The dependency order is intentional:
 
 ```text
-lme-rs 0.2.6 -> lme-rs-agent 0.1.0 -> lme-rs-mcp 0.2.x
-                                      -> lme-rs-scp 0.1.x
+lme-rs 0.2.7 -> lme-rs-agent 0.2.1 -> lme-rs-mcp 0.3.x
+                                      -> lme-rs-scp 0.2.x
 ```
 
 ## 1. Publish the statistical engine
@@ -30,12 +30,12 @@ cargo publish --locked
 
 ## 3. Resolve the registry dependency here
 
-The release manifest uses the registry dependency `lme-rs-agent = "=0.1.0"`.
+The release manifest uses the registry dependency `lme-rs-agent = "=0.2.1"`.
 Remove any local `.cargo/config.toml` patches, then verify the package without
 relying on sibling checkouts:
 
 ```powershell
-cargo update -p lme-rs-agent --precise 0.1.0
+cargo update -p lme-rs-agent --precise 0.2.1
 task ci
 task preflight
 cargo publish --dry-run --locked

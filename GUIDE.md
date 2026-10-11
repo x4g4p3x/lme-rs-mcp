@@ -14,7 +14,7 @@ LmeMcpServer
 lme-rs-agent: LmeAgentApi + FitSession
     |
     v
-lme-rs 0.2.6 + Polars
+lme-rs 0.2.7 + Polars
     |
     v
 FitSession: fit_id -> CachedFit -> LmeFit
@@ -25,7 +25,7 @@ The MCP layer owns transport. The separate `lme-rs-agent` crate owns statistical
 ## Install
 
 ```powershell
-cargo install lme-rs-mcp --version 0.2.0 --locked
+cargo install lme-rs-mcp --version 0.3.0 --locked
 ```
 
 Or build from source using registry dependencies:

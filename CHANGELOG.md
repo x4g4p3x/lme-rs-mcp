@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-11
+
+### Changed
+
+- Bump the minor version because the re-exported shared-core CachedFit now includes
+  captured data and dataset fields; Rust callers constructing it must supply those fields.
+- Align registry dependencies to lme-rs-agent 0.2.1 and lme-rs 0.2.7.
+- Carry the engine's multi-block solve, Type III hypothesis, and scalar KR fixes.
+- Use the shared core's captured-data semantics through the existing MCP workflows.
+
 ## [0.2.0] - 2026-10-10
 
 ### Added

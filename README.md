@@ -18,14 +18,14 @@ LmeMcpServer        transport only
 lme-rs-agent        LmeAgentApi, DTOs, validation, FitSession
     |
     v
-lme-rs 0.2.6 + Polars
+lme-rs 0.2.7 + Polars
 ```
 
 The protocol-neutral core now lives in the separate [`lme-rs-agent`](https://github.com/x4g4p3x/lme-rs-agent) crate. Both this MCP adapter and [`lme-rs-scp`](https://github.com/x4g4p3x/lme-rs-scp) reuse it without depending on each other.
 
 ## Semantic API
 
-The current adapter targets the published **`lme-rs 0.2.6`** release.
+The current adapter targets the published **`lme-rs 0.2.7`** release.
 
 | Capability | Semantic MCP tool | Scope |
 |:--|:--|:--|
@@ -101,7 +101,7 @@ All fitting operations return a `fit_id`, which is used by subsequent semantic o
 
 `compare_models` uses the `lme-rs` likelihood-ratio test. Models must use the same model kind and dataset; GLMMs must also share family/link. When REML applies, compare ML fits (`reml = false`).
 
-`confidence_intervals` supports `method = "wald" | "profile"` and optional coefficient-name selection. Profile intervals are supported for LMM/GLMM by `lme-rs 0.2.6`.
+`confidence_intervals` supports `method = "wald" | "profile"` and optional coefficient-name selection. Profile intervals are supported for LMM/GLMM by `lme-rs 0.2.7`.
 
 ### Cross-validation
 
@@ -114,7 +114,7 @@ All fitting operations return a `fit_id`, which is used by subsequent semantic o
 ## Install
 
 ```powershell
-cargo install lme-rs-mcp --version 0.2.0 --locked
+cargo install lme-rs-mcp --version 0.3.0 --locked
 ```
 
 Or build from source:
@@ -125,7 +125,7 @@ cd lme-rs-mcp
 cargo build --release --locked
 ```
 
-Source builds and published installs resolve `lme-rs-agent 0.1.0` and `lme-rs 0.2.6` from crates.io. Sibling checkouts are optional for co-development.
+Source builds and published installs resolve `lme-rs-agent 0.2.1` and `lme-rs 0.2.7` from crates.io. Sibling checkouts are optional for co-development.
 
 Binary: `target\release\lme-rs-mcp.exe` on Windows or `target/release/lme-rs-mcp` on Unix.
 
@@ -165,7 +165,7 @@ Binary: `target\release\lme-rs-mcp.exe` on Windows or `target/release/lme-rs-mcp
 
 ## Status
 
-Version 0.2.0 targets published `lme-rs 0.2.6`: LM/LMM/GLMM/NLMM fitting, lifecycle management, prediction, model comparison, confidence intervals, model-aware bootstrap, grouped CV, and diagnostics. The original `lme_*` tools remain for compatibility. LM/LMM marginal means and adjusted pairwise comparisons are exposed through the shared core. Expensive tools support the negotiated MCP Tasks extension.
+Version 0.3.0 targets published `lme-rs 0.2.7`: LM/LMM/GLMM/NLMM fitting, lifecycle management, prediction, model comparison, confidence intervals, model-aware bootstrap, grouped CV, and diagnostics. The original `lme_*` tools remain for compatibility. LM/LMM marginal means and adjusted pairwise comparisons are exposed through the shared core. Expensive tools support the negotiated MCP Tasks extension.
 
 Validate publication-critical statistical results against R `lme4` / `lmerTest` as appropriate.
 

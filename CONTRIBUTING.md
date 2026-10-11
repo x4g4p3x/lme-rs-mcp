@@ -15,7 +15,7 @@ Source builds and published installs pull both `lme-rs-agent` and `lme-rs` from 
 
 ```toml
 # Cargo.toml
-lme-rs-agent = "=0.1.0"
+lme-rs-agent = "=0.2.1"
 ```
 
 **Contributors** testing unreleased agent or engine APIs on sibling clones:

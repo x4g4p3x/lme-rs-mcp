@@ -36,8 +36,8 @@ task ci               # lint + check + test
 
 ## Dependencies
 
-- **Shared core:** `lme-rs-agent = "=0.1.0"` from crates.io.
-- **Statistical engine:** `lme-rs = "0.2.6"` through `lme-rs-agent` (and directly in tests).
+- **Shared core:** `lme-rs-agent = "=0.2.1"` from crates.io.
+- **Statistical engine:** `lme-rs = "0.2.7"` through `lme-rs-agent` (and directly in tests).
 - **Co-dev patch:** `task patch:local` when testing unreleased agent/engine APIs on sibling checkouts.
 
 Release order: [RELEASING.md](RELEASING.md).
